@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
+const [drivers, setDrivers] = useState<any[]>([]);
 import {
   collection,
   addDoc,
@@ -47,7 +47,19 @@ export default function AdminPage() {
     "Hans",
   ];
 
-  useEffect(() => {
+  useEffect(() => {async function loadDrivers() {
+  loadDrivers();
+    const snapshot = await getDocs(collection(db, "drivers"));
+
+  const list = snapshot.docs
+    .map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }))
+    .filter((driver: any) => driver.active);
+
+  setDrivers(list);
+}
     loadTour();
   }, []);
 
@@ -425,37 +437,22 @@ export default function AdminPage() {
           </h1>
 
           <select
-            value={selectedDriver}
-            onChange={(e) =>
-              setSelectedDriver(
-                e.target.value
-              )
-            }
-            style={{
-              width: 320,
+  value={selectedDriver}
+  onChange={(e) => setSelectedDriver(e.target.value)}
+  style={{
+    width: 320,
+    padding: 15,
+    borderRadius: 14,
+  }}
+>
+  <option value="">Select Driver</option>
 
-              padding: 15,
-
-              borderRadius: 14,
-
-              border: "none",
-
-              marginBottom: 20,
-
-              fontSize: 16,
-            }}
-          >
-            {drivers.map(
-              (driver) => (
-                <option
-                  key={driver}
-                  value={driver}
-                >
-                  {driver}
-                </option>
-              )
-            )}
-          </select>
+  {drivers.map((driver: any) => (
+    <option key={driver.id} value={driver.name}>
+      {driver.name}
+    </option>
+  ))}
+</select>
 
           <br />
 
