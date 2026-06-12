@@ -1,129 +1,119 @@
 "use client";
 
-import { addDoc, collection, deleteDoc, doc, getDocs, updateDoc } from "firebase/firestore";
-import { db } from "@/firebase";
 import { useEffect, useState } from "react";
+import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
+import { db } from "../../firebase";
 
-const ADMIN_PASSWORD = "123456";
-
-type Driver = {
+type Stop = {
   id: string;
-  name: string;
-  active: boolean;
-  password?: string;
+  name?: string;
+  adresse?: string;
+  telefon?: string;
+  notiz?: string;
+  fahrer?: string;
+  status?: string;
+  nachbar?: string;
+  deliveredDate?: string;
+  deliveredTime?: string;
 };
 
-export default function DriversAdminPage() {
-  const [allowed, setAllowed] = useState(false);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [newName, setNewName] = useState("");
-  const [newPassword, setNewPassword] = useState("");
+const DRIVERS = [
+  { name: "mohammed", password: "19901990" },
+  { name: "Hisham",   password: "19901990" },
+  { name: "Mahmoud",  password: "19901990" },
+  { name: "Rainer",   password: "19901990" },
+  { name: "Hans",     password: "19901990" },
+];
+
+export default function DriverPage() {
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [tour, setTour] = useState<Stop[]>([]);
   const [loading, setLoading] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editPassword, setEditPassword] = useState("");
-  const [toast, setToast] = useState<string | null>(null);
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  }
-
-  function loginAdmin() {
-    if (password === ADMIN_PASSWORD) {
-      localStorage.setItem("driversAdminAllowed", "yes");
-      setAllowed(true);
-      loadDrivers();
-    } else {
-      alert("Wrong password");
-    }
-  }
-
-  function logoutAdmin() {
-    localStorage.removeItem("driversAdminAllowed");
-    setAllowed(false);
-    setPassword("");
-  }
-
-  async function loadDrivers() {
-    setLoading(true);
-    const snapshot = await getDocs(collection(db, "drivers"));
-    const list = snapshot.docs.map((item) => ({
-      id: item.id,
-      name: item.data().name || "",
-      active: item.data().active !== false,
-      password: item.data().password || "",
-    }));
-    setDrivers(list);
-    setLoading(false);
-  }
-
-  async function addDriver() {
-    if (!newName.trim()) return;
-    await addDoc(collection(db, "drivers"), {
-      name: newName.trim(),
-      active: true,
-      password: newPassword.trim(),
-      createdAt: new Date().toISOString(),
-    });
-    setNewName("");
-    setNewPassword("");
-    showToast("✅ Fahrer hinzugefügt!");
-    loadDrivers();
-  }
-
-  async function deleteDriver(id: string) {
-    if (!confirm("Fahrer löschen?")) return;
-    await deleteDoc(doc(db, "drivers", id));
-    showToast("🗑️ Fahrer gelöscht!");
-    loadDrivers();
-  }
-
-  async function toggleDriver(driver: Driver) {
-    await updateDoc(doc(db, "drivers", driver.id), { active: !driver.active });
-    showToast(driver.active ? "⛔ Deaktiviert" : "✅ Aktiviert");
-    loadDrivers();
-  }
-
-  function startEdit(driver: Driver) {
-    setEditingId(driver.id);
-    setEditName(driver.name);
-    setEditPassword(driver.password || "");
-  }
-
-  async function saveEdit(id: string) {
-    if (!editName.trim()) return;
-    await updateDoc(doc(db, "drivers", id), {
-      name: editName.trim(),
-      password: editPassword.trim(),
-    });
-    setEditingId(null);
-    showToast("✅ Änderungen gespeichert!");
-    loadDrivers();
-  }
 
   useEffect(() => {
-    if (localStorage.getItem("driversAdminAllowed") === "yes") {
-      setAllowed(true);
-      loadDrivers();
+    const saved = localStorage.getItem("driverName");
+    if (saved) {
+      setName(saved);
+      setLoggedIn(true);
+      loadTour(saved);
     }
   }, []);
 
-  if (!allowed) {
+  async function loadTour(driverName: string) {
+    setLoading(true);
+    const snapshot = await getDocs(collection(db, "touren"));
+    const allStops: Stop[] = [];
+    snapshot.forEach((document) => {
+      allStops.push({ id: document.id, ...(document.data() as Omit<Stop, "id">) });
+    });
+    const filtered = allStops.filter(
+      (stop) => stop.fahrer?.toLowerCase().trim() === driverName.toLowerCase().trim()
+    );
+    setTour(filtered);
+    setLoading(false);
+  }
+
+  async function updateStatus(stopId: string, status: string, nachbar: string = "") {
+    const now = new Date();
+    await updateDoc(doc(db, "touren", stopId), {
+      status,
+      nachbar,
+      deliveredDate: now.toLocaleDateString("de-DE"),
+      deliveredTime: now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }),
+      updatedAt: now.toISOString(),
+    });
+    await loadTour(name);
+  }
+
+  async function login() {
+    const found = DRIVERS.find(
+      (d) => d.name.toLowerCase() === name.toLowerCase() && d.password === password
+    );
+    if (!found) {
+      alert("Falscher Login");
+      return;
+    }
+    localStorage.setItem("driverName", found.name);
+    setLoggedIn(true);
+    loadTour(found.name);
+  }
+
+  function logout() {
+    localStorage.removeItem("driverName");
+    location.reload();
+  }
+
+  const deliveredCount = tour.filter((s) => s.status === "Geliefert").length;
+  const progress = tour.length > 0 ? (deliveredCount / tour.length) * 100 : 0;
+  const sortedTour = [...tour].sort((a, b) => {
+    if (!a.status && b.status) return -1;
+    if (a.status && !b.status) return 1;
+    return 0;
+  });
+
+  if (!loggedIn) {
     return (
-      <main style={S.main}>
-        <div style={S.loginBox}>
-          <h1 style={S.loginTitle}>🔐 Admin Login</h1>
+      <main style={{ minHeight: "100vh", background: "linear-gradient(180deg,#020617 0%,#04122b 50%,#020617 100%)", display: "flex", justifyContent: "center", alignItems: "center", padding: 20, fontFamily: "Arial" }}>
+        <div style={{ width: "100%", maxWidth: 420, background: "rgba(15,23,42,0.88)", padding: 35, borderRadius: 30 }}>
+          <img src="/logo.png" alt="logo" style={{ width: 220, display: "block", margin: "0 auto 20px auto", borderRadius: 24 }} />
+          <h1 style={{ color: "white", marginBottom: 25, textAlign: "center", fontSize: 34 }}>Fahrer Login</h1>
+          <input
+            placeholder="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={{ width: "100%", padding: 15, marginBottom: 15, borderRadius: 14, border: "none", fontSize: 16 }}
+          />
           <input
             type="password"
+            placeholder="Passwort"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && loginAdmin()}
-            placeholder="Admin Passwort"
-            style={S.input}
+            onKeyDown={(e) => e.key === "Enter" && login()}
+            style={{ width: "100%", padding: 15, marginBottom: 20, borderRadius: 14, border: "none", fontSize: 16 }}
           />
-          <button onClick={loginAdmin} style={{ ...S.btn, ...S.btnGreen, width: "100%", marginTop: 8 }}>
+          <button onClick={login} style={{ width: "100%", padding: 16, border: "none", borderRadius: 14, background: "linear-gradient(90deg,#22c55e,#16a34a)", color: "white", fontWeight: "bold", fontSize: 18, cursor: "pointer" }}>
             Login
           </button>
         </div>
@@ -131,170 +121,71 @@ export default function DriversAdminPage() {
     );
   }
 
-  const activeCount = drivers.filter((d) => d.active).length;
-
   return (
-    <main style={S.main}>
-      {toast && <div style={S.toast}>{toast}</div>}
+    <main style={{ minHeight: "100vh", background: "linear-gradient(180deg,#020617 0%,#04122b 50%,#020617 100%)", padding: 20, fontFamily: "Arial" }}>
+      <div style={{ maxWidth: 950, margin: "0 auto" }}>
+        <img src="/logo.png" alt="logo" style={{ width: 150, borderRadius: 22, marginBottom: 20 }} />
+        <h1 style={{ color: "white", marginBottom: 8 }}>Willkommen {name}</h1>
+        <p style={{ color: "#94a3b8", marginBottom: 20 }}>Dirk Schröder FahrerApp</p>
+        <button onClick={logout} style={{ background: "#dc2626", color: "white", border: "none", padding: "12px 20px", borderRadius: 12, marginBottom: 25, fontWeight: "bold", cursor: "pointer" }}>
+          Logout
+        </button>
 
-      <div style={S.container}>
-
-        {/* Header */}
-        <div style={S.header}>
-          <div>
-            <h1 style={S.title}>👥 Driver Management</h1>
-            <p style={S.subtitle}>{activeCount} aktiv / {drivers.length} gesamt</p>
+        <div style={{ background: "rgba(255,255,255,0.08)", padding: 24, borderRadius: 24, marginBottom: 25 }}>
+          <h2 style={{ color: "white" }}>Fortschritt</h2>
+          <div style={{ width: "100%", height: 20, background: "rgba(255,255,255,0.08)", borderRadius: 999, overflow: "hidden" }}>
+            <div style={{ width: `${progress}%`, height: "100%", background: "linear-gradient(90deg,#22c55e,#16a34a)", transition: "width 0.4s ease" }} />
           </div>
-          <button onClick={logoutAdmin} style={{ ...S.btn, ...S.btnRed }}>
-            🚪 Logout
-          </button>
+          <p style={{ color: "#86efac", marginTop: 12, fontWeight: "bold" }}>
+            {deliveredCount} von {tour.length} geliefert
+          </p>
         </div>
 
-        {/* Add Driver */}
-        <div style={S.card}>
-          <h2 style={S.cardTitle}>➕ Fahrer hinzufügen</h2>
-          <div style={S.row}>
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Name"
-              style={S.input}
-            />
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Passwort"
-              style={S.input}
-            />
-            <button onClick={addDriver} disabled={!newName.trim()} style={{ ...S.btn, ...S.btnBlue }}>
-              ➕ Hinzufügen
-            </button>
-          </div>
-        </div>
+        {loading && <p style={{ color: "white" }}>Tour wird geladen...</p>}
 
-        {/* Drivers List */}
-        <div style={S.card}>
-          <h2 style={S.cardTitle}>📋 Fahrerliste</h2>
-          {loading ? (
-            <p style={{ color: "#64748b" }}>Lädt...</p>
-          ) : drivers.length === 0 ? (
-            <p style={{ color: "#64748b" }}>Keine Fahrer gefunden.</p>
-          ) : (
-            drivers.map((driver) => (
-              <div key={driver.id} style={{ ...S.driverRow, opacity: driver.active ? 1 : 0.5 }}>
-
-                {editingId === driver.id ? (
-                  // Edit Mode
-                  <div style={S.editRow}>
-                    <input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      style={{ ...S.input, flex: 1 }}
-                      placeholder="Name"
-                    />
-                    <input
-                      type="password"
-                      value={editPassword}
-                      onChange={(e) => setEditPassword(e.target.value)}
-                      style={{ ...S.input, flex: 1 }}
-                      placeholder="Passwort"
-                    />
-                    <button onClick={() => saveEdit(driver.id)} style={{ ...S.btn, ...S.btnGreen }}>
-                      💾 Speichern
-                    </button>
-                    <button onClick={() => setEditingId(null)} style={{ ...S.btn, ...S.btnGray }}>
-                      ✕
-                    </button>
-                  </div>
-                ) : (
-                  // View Mode
-                  <>
-                    <div style={S.driverInfo}>
-                      <div style={S.driverName}>{driver.name}</div>
-                      <div style={{ ...S.driverStatus, color: driver.active ? "#22c55e" : "#ef4444" }}>
-                        {driver.active ? "● Aktiv" : "● Inaktiv"}
-                      </div>
-                    </div>
-                    <div style={S.driverActions}>
-                      <button onClick={() => startEdit(driver)} style={{ ...S.btn, ...S.btnBlue }}>
-                        ✏️ Bearbeiten
-                      </button>
-                      <button onClick={() => toggleDriver(driver)} style={{ ...S.btn, ...(driver.active ? S.btnOrange : S.btnGreen) }}>
-                        {driver.active ? "⛔ Deaktivieren" : "✅ Aktivieren"}
-                      </button>
-                      <button onClick={() => deleteDriver(driver.id)} style={{ ...S.btn, ...S.btnRed }}>
-                        🗑️ Löschen
-                      </button>
-                    </div>
-                  </>
-                )}
+        {sortedTour.map((stop, index) => (
+          <div key={stop.id} style={{ background: stop.status ? "rgba(22,163,74,0.16)" : "rgba(255,255,255,0.08)", padding: 24, borderRadius: 24, marginBottom: 22 }}>
+            <h2 style={{ color: "white", marginBottom: 12 }}>{index + 1}. {stop.name}</h2>
+            {stop.adresse && <p style={{ color: "#d1d5db" }}>📍 {stop.adresse}</p>}
+            {stop.telefon && <p style={{ color: "#d1d5db" }}>📞 {stop.telefon}</p>}
+            {stop.notiz && <p style={{ color: "#d1d5db" }}>📝 {stop.notiz}</p>}
+            {stop.status && (
+              <div style={{ marginTop: 10 }}>
+                <p style={{ color: "#86efac", fontWeight: "bold" }}>✅ {stop.status}</p>
+                {stop.deliveredDate && <p style={{ color: "#d1fae5" }}>📅 {stop.deliveredDate}</p>}
+                {stop.deliveredTime && <p style={{ color: "#d1fae5" }}>⏰ {stop.deliveredTime}</p>}
               </div>
-            ))
-          )}
-        </div>
+            )}
+            <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stop.adresse || stop.name || "")}`}
+                target="_blank"
+                style={{ background: "#2563eb", color: "white", textDecoration: "none", padding: "10px 14px", borderRadius: 10, fontWeight: "bold" }}
+              >
+                Google Maps
+              </a>
+              <button onClick={() => updateStatus(stop.id, "Geliefert")} style={{ background: "#22c55e", color: "white", border: "none", padding: "10px 14px", borderRadius: 10, cursor: "pointer" }}>
+                Geliefert
+              </button>
+              <button
+                onClick={() => {
+                  const nachbar = prompt("Name vom Nachbarn?");
+                  updateStatus(stop.id, "Beim Nachbarn", nachbar || "");
+                }}
+                style={{ background: "#f97316", color: "white", border: "none", padding: "10px 14px", borderRadius: 10, cursor: "pointer" }}
+              >
+                Nachbar
+              </button>
+              <button onClick={() => updateStatus(stop.id, "Vor die Tür")} style={{ background: "#0f766e", color: "white", border: "none", padding: "10px 14px", borderRadius: 10, cursor: "pointer" }}>
+                Vor die Tür
+              </button>
+              <button onClick={() => updateStatus(stop.id, "Falsche Adresse")} style={{ background: "#dc2626", color: "white", border: "none", padding: "10px 14px", borderRadius: 10, cursor: "pointer" }}>
+                Falsche Adresse
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </main>
   );
 }
-
-const S: Record<string, React.CSSProperties> = {
-  main: {
-    minHeight: "100vh",
-    background: "linear-gradient(180deg,#020617 0%,#04122b 50%,#020617 100%)",
-    padding: 24,
-    fontFamily: "Arial, sans-serif",
-  },
-  container: { maxWidth: 900, margin: "0 auto" },
-  loginBox: {
-    maxWidth: 400, margin: "100px auto",
-    background: "rgba(15,23,42,0.9)",
-    padding: 40, borderRadius: 24,
-    border: "1px solid rgba(255,255,255,0.08)",
-  },
-  loginTitle: { color: "white", fontSize: 28, marginBottom: 24, textAlign: "center" },
-  toast: {
-    position: "fixed", top: 24, right: 24, zIndex: 9999,
-    background: "#14532d", color: "#86efac",
-    border: "1px solid #22c55e",
-    padding: "14px 20px", borderRadius: 12,
-    fontWeight: "bold", fontSize: 14,
-  },
-  header: {
-    display: "flex", justifyContent: "space-between",
-    alignItems: "center", marginBottom: 24,
-  },
-  title: { color: "white", fontSize: 32, margin: 0 },
-  subtitle: { color: "#64748b", fontSize: 14, margin: "4px 0 0" },
-  card: {
-    background: "rgba(15,23,42,0.9)",
-    border: "1px solid rgba(255,255,255,0.07)",
-    borderRadius: 24, padding: 24, marginBottom: 20,
-  },
-  cardTitle: { color: "white", fontSize: 18, margin: "0 0 16px", fontWeight: "bold" },
-  row: { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" },
-  input: {
-    padding: "12px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)",
-    background: "rgba(255,255,255,0.06)", color: "white",
-    fontSize: 14, minWidth: 160,
-  },
-  driverRow: {
-    padding: "16px 0",
-    borderBottom: "1px solid rgba(255,255,255,0.06)",
-  },
-  editRow: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" },
-  driverInfo: { marginBottom: 10 },
-  driverName: { color: "white", fontSize: 16, fontWeight: "bold" },
-  driverStatus: { fontSize: 13, marginTop: 4 },
-  driverActions: { display: "flex", gap: 8, flexWrap: "wrap" },
-  btn: {
-    border: "none", padding: "10px 16px", borderRadius: 10,
-    fontWeight: "bold", cursor: "pointer", fontSize: 13,
-    transition: "opacity 0.2s",
-  },
-  btnBlue: { background: "#2563eb", color: "white" },
-  btnGreen: { background: "#16a34a", color: "white" },
-  btnRed: { background: "#dc2626", color: "white" },
-  btnOrange: { background: "#d97706", color: "white" },
-  btnGray: { background: "rgba(255,255,255,0.1)", color: "white" },
-};
