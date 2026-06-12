@@ -43,8 +43,8 @@ export async function POST(request: Request) {
                 type: "input_text",
 
                 text:
-                  "Lies diesen Tourenplan PDF und gib NUR JSON zurück. Format: " +
-                  '[{"name":"","adresse":"","telefon":"","notiz":""}]',
+                  "Lies diesen Tourenplan PDF und gib NUR ein JSON-Array zurück, EXAKT in der Reihenfolge wie im PDF (nach der # Spalte sortiert). Ignoriere die letzte Zeile wenn sie 'Endziel' enthält. Format: " +
+                  '[{"order":1,"name":"Kundenname oder leer","adresse":"vollständige Adresse","telefon":"","notiz":""}]. Gib NUR das JSON zurück, kein Text davor oder danach.',
               },
 
               {
@@ -66,8 +66,11 @@ export async function POST(request: Request) {
       .replace(/```/g, "")
       .trim();
 
-    const data =
-      JSON.parse(cleaned);
+    const raw = JSON.parse(cleaned);
+    // sort by order field if present, then strip it — admin saves index as order
+    const data = Array.isArray(raw)
+      ? [...raw].sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+      : raw;
 
     return NextResponse.json({
       success: true,

@@ -19,6 +19,7 @@ type Stop = {
   photoUrl?: string;
   lat?: number;
   lng?: number;
+  order?: number;
 };
 
 type QueuedUpdate = {
@@ -182,7 +183,9 @@ export default function DriverPage() {
       const snapshot = await getDocs(collection(db, "touren"));
       const allStops: Stop[] = [];
       snapshot.forEach((document) => { allStops.push({ id: document.id, ...(document.data() as Omit<Stop, "id">) }); });
-      const filtered = allStops.filter((stop) => stop.fahrer?.toLowerCase().trim() === driverName.toLowerCase().trim());
+      const filtered = allStops
+        .filter((stop) => stop.fahrer?.toLowerCase().trim() === driverName.toLowerCase().trim())
+        .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999));
       setTour(filtered);
       localStorage.setItem("cachedTour_" + driverName, JSON.stringify(filtered));
     } catch {

@@ -7,11 +7,14 @@ import {
 } from "firebase/firestore";
 import { db } from "../../firebase";
 
+const ADMIN_PASSWORD = "admin123";
+
 type Driver = { id: string; name: string; active: boolean };
 type Stop = {
   id: string; name: string; adresse: string;
   telefon?: string; notiz?: string; fahrer: string;
   status: string; deliveredDate?: string; deliveredTime?: string;
+  nachbar?: string; photoURL?: string; gpsLat?: number; gpsLng?: number;
 };
 type StatusFilter = "" | "Geliefert" | "Beim Nachbarn" | "Vor die Tür" | "Falsche Adresse";
 type Toast = { id: number; message: string; type: "success" | "error" };
@@ -44,7 +47,13 @@ const tulpenSVG = `<svg xmlns="http://www.w3.org/2000/svg" style="position:fixed
   <rect x="363" y="826" width="4" height="65" fill="#6a8a60" rx="2"/>
 </svg>`;
 
+const inp: React.CSSProperties = { padding: "10px 14px", borderRadius: 10, border: "0.5px solid #d4a8a8", background: "#fdf6f0", color: "#2c1a1a", fontSize: 14 };
+const card: React.CSSProperties = { background: "#fff8f5", padding: 28, borderRadius: 20, marginBottom: 24, border: "0.5px solid #e0b8b0" };
+const btn = (bg: string, color: string, disabled = false): React.CSSProperties => ({ background: bg, color, border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: "bold", cursor: disabled ? "default" : "pointer", fontSize: 13, opacity: disabled ? 0.55 : 1 });
+
 export default function AdminPage() {
+  const [allowed, setAllowed] = useState(false);
+  const [pw, setPw] = useState("");
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [selectedDriver, setSelectedDriver] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
@@ -56,6 +65,9 @@ export default function AdminPage() {
   const [filterDriver, setFilterDriver] = useState("all");
   const [filterDate, setFilterDate] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [photoModal, setPhotoModal] = useState<Stop | null>(null);
+  const [editStop, setEditStop] = useState<Stop | null>(null);
+  const [editNotiz, setEditNotiz] = useState("");
 
   function showToast(message: string, type: "success" | "error" = "success") {
     const id = Date.now();
@@ -63,7 +75,27 @@ export default function AdminPage() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
   }
 
+  function loginAdmin() {
+    if (pw === ADMIN_PASSWORD) {
+      localStorage.setItem("adminAllowed", "yes");
+      setAllowed(true);
+    } else {
+      showToast("Falsches Passwort!", "error");
+    }
+  }
+
+  function logoutAdmin() {
+    localStorage.removeItem("adminAllowed");
+    setAllowed(false);
+    setPw("");
+  }
+
   useEffect(() => {
+    if (localStorage.getItem("adminAllowed") === "yes") setAllowed(true);
+  }, []);
+
+  useEffect(() => {
+    if (!allowed) return;
     async function loadDrivers() {
       try {
         const snapshot = await getDocs(collection(db, "drivers"));
@@ -73,15 +105,16 @@ export default function AdminPage() {
       } catch { showToast("Fahrer konnten nicht geladen werden.", "error"); }
     }
     loadDrivers();
-  }, []);
+  }, [allowed]);
 
   useEffect(() => {
+    if (!allowed) return;
     const unsubscribe = onSnapshot(collection(db, "touren"),
       (snapshot) => { setTour(snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Stop, "id">) }))); },
       () => showToast("Verbindungsfehler", "error")
     );
     return () => unsubscribe();
-  }, []);
+  }, [allowed]);
 
   const filteredTour = useMemo(() => tour.filter((stop) => {
     const matchesSearch = search === "" || stop.name?.toLowerCase().includes(search.toLowerCase()) || stop.adresse?.toLowerCase().includes(search.toLowerCase());
@@ -97,9 +130,23 @@ export default function AdminPage() {
     neighbor: tour.filter((s) => s.status === "Beim Nachbarn").length,
     door: tour.filter((s) => s.status === "Vor die Tür").length,
     wrong: tour.filter((s) => s.status === "Falsche Adresse").length,
+    withPhoto: tour.filter((s) => s.photoURL).length,
   }), [tour]);
 
   const completionPercent = stats.total > 0 ? Math.round(((stats.total - stats.pending) / stats.total) * 100) : 0;
+
+  // per-driver stats for daily report
+  const driverStats = useMemo(() => {
+    const map: Record<string, { delivered: number; wrong: number; pending: number; total: number }> = {};
+    tour.forEach((s) => {
+      if (!map[s.fahrer]) map[s.fahrer] = { delivered: 0, wrong: 0, pending: 0, total: 0 };
+      map[s.fahrer].total++;
+      if (s.status === "Geliefert" || s.status === "Beim Nachbarn" || s.status === "Vor die Tür") map[s.fahrer].delivered++;
+      else if (s.status === "Falsche Adresse") map[s.fahrer].wrong++;
+      else map[s.fahrer].pending++;
+    });
+    return map;
+  }, [tour]);
 
   async function uploadPDF() {
     if (!file) { showToast("Bitte PDF wählen", "error"); return; }
@@ -111,9 +158,20 @@ export default function AdminPage() {
       const response = await fetch("/api/read-tour", { method: "POST", body: formData });
       const result = await response.json();
       if (!result.success) { showToast(result.error ?? "Fehler", "error"); return; }
-      await Promise.all(result.data.map((item: Partial<Stop>) =>
-        addDoc(collection(db, "touren"), { name: item.name ?? "", adresse: item.adresse ?? "", telefon: item.telefon ?? "", notiz: item.notiz ?? "", fahrer: selectedDriver, status: "", deliveredDate: "", deliveredTime: "" })
-      ));
+      for (let i = 0; i < result.data.length; i++) {
+        const item = result.data[i] as Partial<Stop> & { order?: number };
+        await addDoc(collection(db, "touren"), {
+          name: item.name ?? "",
+          adresse: item.adresse ?? "",
+          telefon: item.telefon ?? "",
+          notiz: item.notiz ?? "",
+          fahrer: selectedDriver,
+          status: "",
+          deliveredDate: "",
+          deliveredTime: "",
+          order: i,
+        });
+      }
       showToast("Tour erfolgreich importiert ✅");
       setFile(null);
     } catch { showToast("Fehler beim PDF-Upload", "error"); }
@@ -138,22 +196,40 @@ export default function AdminPage() {
     setResetting(true);
     try {
       const snapshot = await getDocs(collection(db, "touren"));
-      await Promise.all(snapshot.docs.map((d) => updateDoc(doc(db, "touren", d.id), { status: "", deliveredDate: "", deliveredTime: "" })));
+      await Promise.all(snapshot.docs.map((d) => updateDoc(doc(db, "touren", d.id), { status: "", deliveredDate: "", deliveredTime: "", photoURL: "", gpsLat: null, gpsLng: null })));
       showToast("Status erfolgreich zurückgesetzt ✅");
     } catch { showToast("Fehler beim Zurücksetzen", "error"); }
     finally { setResetting(false); }
   }
 
+  async function saveEditNotiz() {
+    if (!editStop) return;
+    await updateDoc(doc(db, "touren", editStop.id), { notiz: editNotiz });
+    showToast("Notiz gespeichert ✅");
+    setEditStop(null);
+  }
+
   function exportCSV() {
-    const headers = ["Name", "Adresse", "Telefon", "Fahrer", "Status", "Datum", "Zeit"];
-    const rows = filteredTour.map((s) => [s.name, s.adresse, s.telefon ?? "", s.fahrer, s.status, s.deliveredDate ?? "", s.deliveredTime ?? ""]);
+    const headers = ["Name", "Adresse", "Telefon", "Fahrer", "Status", "Datum", "Zeit", "Nachbar"];
+    const rows = filteredTour.map((s) => [s.name, s.adresse, s.telefon ?? "", s.fahrer, s.status, s.deliveredDate ?? "", s.deliveredTime ?? "", s.nachbar ?? ""]);
     const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `tour-export-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
     URL.revokeObjectURL(url);
     showToast("Export erfolgreich ✅");
+  }
+
+  function printList() {
+    const items = filteredTour.filter((s) => !s.status);
+    const html = `<html><head><title>Tour</title><style>body{font-family:Georgia,serif;padding:20px;color:#2c1a1a} h1{color:#c08878} table{width:100%;border-collapse:collapse} td,th{border:1px solid #e0b8b0;padding:8px;text-align:left;font-size:13px} th{background:#fdf6f0;color:#b07878}</style></head><body>
+      <h1>Dirk Schröder — Offene Stopps (${new Date().toLocaleDateString("de-DE")})</h1>
+      <table><tr><th>#</th><th>Name</th><th>Adresse</th><th>Telefon</th><th>Fahrer</th><th>Notiz</th></tr>
+      ${items.map((s, i) => `<tr><td>${i + 1}</td><td>${s.name}</td><td>${s.adresse}</td><td>${s.telefon ?? ""}</td><td>${s.fahrer}</td><td>${s.notiz ?? ""}</td></tr>`).join("")}
+      </table></body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); w.print(); }
   }
 
   const sections: { title: string; status: StatusFilter; color: string }[] = [
@@ -164,26 +240,85 @@ export default function AdminPage() {
     { title: "❌ Falsche Adresse", status: "Falsche Adresse", color: "#9a4a4a" },
   ];
 
+  // ── Login Screen ──────────────────────────────────────────────────────────
+  if (!allowed) {
+    return (
+      <main style={{ minHeight: "100vh", background: "#fdf6f0", display: "flex", justifyContent: "center", alignItems: "center", fontFamily: "Arial, sans-serif", position: "relative", overflow: "hidden" }}>
+        <div dangerouslySetInnerHTML={{ __html: tulpenSVG }} />
+        {toasts.length > 0 && (
+          <div style={{ position: "fixed", top: 24, right: 24, zIndex: 9999 }}>
+            {toasts.map((t) => (
+              <div key={t.id} style={{ padding: "14px 20px", borderRadius: 12, fontWeight: "bold", fontSize: 14, background: t.type === "error" ? "#f5dddd" : "#ddf0e0", color: t.type === "error" ? "#9a4a4a" : "#3a7a50", border: `0.5px solid ${t.type === "error" ? "#e0b8b0" : "#a8c8a0"}` }}>{t.message}</div>
+            ))}
+          </div>
+        )}
+        <div style={{ ...card, maxWidth: 400, width: "100%", position: "relative", zIndex: 1 }}>
+          <div style={{ textAlign: "center", marginBottom: 24 }}>
+            <img src="/logo.png" alt="Dirk Schröder" style={{ width: 80, height: 80, objectFit: "contain", borderRadius: "50%" }} />
+            <p style={{ color: "#2c1a1a", fontSize: 20, fontWeight: 500, margin: "8px 0 0", fontFamily: "Georgia, serif" }}>Dirk Schröder</p>
+            <p style={{ color: "#b07878", fontSize: 10, letterSpacing: 3, textTransform: "uppercase", margin: "4px 0 0" }}>· Admin Dashboard ·</p>
+          </div>
+          <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && loginAdmin()} placeholder="Admin Passwort" style={{ ...inp, width: "100%", marginBottom: 12, boxSizing: "border-box" }} />
+          <button onClick={loginAdmin} style={{ ...btn("#c08878", "white"), width: "100%", padding: "12px" }}>Login</button>
+        </div>
+      </main>
+    );
+  }
+
+  // ── Main Dashboard ────────────────────────────────────────────────────────
   return (
     <main style={{ minHeight: "100vh", background: "#fdf6f0", padding: 24, fontFamily: "Arial, sans-serif", position: "relative", overflow: "hidden" }}>
       <div dangerouslySetInnerHTML={{ __html: tulpenSVG }} />
 
+      {/* Toasts */}
+      <div style={{ position: "fixed", top: 24, right: 24, zIndex: 9999, display: "flex", flexDirection: "column", gap: 10 }}>
+        {toasts.map((t) => (
+          <div key={t.id} style={{ padding: "14px 20px", borderRadius: 12, fontWeight: "bold", fontSize: 14, minWidth: 260, background: t.type === "error" ? "#f5dddd" : "#ddf0e0", color: t.type === "error" ? "#9a4a4a" : "#3a7a50", border: `0.5px solid ${t.type === "error" ? "#e0b8b0" : "#a8c8a0"}` }}>
+            {t.message}
+          </div>
+        ))}
+      </div>
+
+      {/* Photo Modal */}
+      {photoModal && (
+        <div onClick={() => setPhotoModal(null)} style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff8f5", borderRadius: 20, padding: 24, maxWidth: 520, width: "100%", border: "0.5px solid #e0b8b0" }}>
+            <p style={{ color: "#2c1a1a", fontFamily: "Georgia, serif", fontSize: 16, margin: "0 0 12px", fontWeight: 500 }}>{photoModal.name}</p>
+            <p style={{ color: "#8a7070", fontSize: 13, margin: "0 0 14px" }}>📍 {photoModal.adresse}</p>
+            {photoModal.photoURL && <img src={photoModal.photoURL} alt="Lieferfoto" style={{ width: "100%", borderRadius: 12, marginBottom: 12 }} />}
+            {photoModal.gpsLat && (
+              <a href={`https://www.google.com/maps?q=${photoModal.gpsLat},${photoModal.gpsLng}`} target="_blank" style={{ display: "inline-block", color: "#4a6a9a", fontSize: 13, fontWeight: "bold", textDecoration: "none", marginBottom: 12 }}>
+                📍 GPS auf Google Maps öffnen
+              </a>
+            )}
+            <p style={{ color: "#3a7a50", fontSize: 13, margin: "0 0 16px" }}>📅 {photoModal.deliveredDate} {photoModal.deliveredTime}</p>
+            <button onClick={() => setPhotoModal(null)} style={{ ...btn("#f5e8e0", "#b07878"), width: "100%" }}>Schließen</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Note Modal */}
+      {editStop && (
+        <div onClick={() => setEditStop(null)} style={{ position: "fixed", inset: 0, zIndex: 9997, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff8f5", borderRadius: 20, padding: 24, maxWidth: 420, width: "100%", border: "0.5px solid #e0b8b0" }}>
+            <p style={{ color: "#2c1a1a", fontFamily: "Georgia, serif", fontSize: 16, margin: "0 0 16px", fontWeight: 500 }}>Notiz bearbeiten — {editStop.name}</p>
+            <textarea value={editNotiz} onChange={(e) => setEditNotiz(e.target.value)} rows={4} style={{ ...inp, width: "100%", boxSizing: "border-box", resize: "vertical", marginBottom: 14 }} />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={saveEditNotiz} style={btn("#ddf0e0", "#3a7a50")}>💾 Speichern</button>
+              <button onClick={() => setEditStop(null)} style={btn("#f5e8e0", "#b07878")}>Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ maxWidth: 1200, margin: "0 auto", position: "relative", zIndex: 1 }}>
 
-        {/* Logo + Header */}
+        {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 28, paddingBottom: 20, borderBottom: "0.5px solid #e8c8c0" }}>
           <img src="/logo.png" alt="Dirk Schröder" style={{ width: 90, height: 90, objectFit: "contain", borderRadius: "50%" }} />
           <p style={{ color: "#2c1a1a", fontSize: 22, fontWeight: 500, margin: "6px 0 0", fontFamily: "Georgia, serif" }}>Dirk Schröder</p>
           <p style={{ color: "#b07878", fontSize: 10, letterSpacing: 3, textTransform: "uppercase", margin: "4px 0 0" }}>· Admin Dashboard ·</p>
-        </div>
-
-        {/* Toasts */}
-        <div style={{ position: "fixed", top: 24, right: 24, zIndex: 9999, display: "flex", flexDirection: "column", gap: 10 }}>
-          {toasts.map((t) => (
-            <div key={t.id} style={{ padding: "14px 20px", borderRadius: 12, fontWeight: "bold", fontSize: 14, minWidth: 260, background: t.type === "error" ? "#f5dddd" : "#ddf0e0", color: t.type === "error" ? "#9a4a4a" : "#3a7a50", border: `0.5px solid ${t.type === "error" ? "#e0b8b0" : "#a8c8a0"}` }}>
-              {t.message}
-            </div>
-          ))}
+          <button onClick={logoutAdmin} style={{ ...btn("#f5dddd", "#9a4a4a"), marginTop: 12 }}>🚪 Logout</button>
         </div>
 
         {/* Stats */}
@@ -194,9 +329,10 @@ export default function AdminPage() {
             { label: "Geliefert", value: stats.delivered, color: "#3a7a50" },
             { label: "Nachbar", value: stats.neighbor, color: "#9a6030" },
             { label: "Falsch", value: stats.wrong, color: "#9a4a4a" },
+            { label: "📸 Fotos", value: stats.withPhoto, color: "#6a5aaa" },
           ].map((stat) => (
-            <div key={stat.label} style={{ flex: 1, minWidth: 110, background: "#fff8f5", border: "0.5px solid #e0b8b0", borderRadius: 16, padding: "18px 16px", textAlign: "center" }}>
-              <p style={{ fontSize: 36, fontWeight: 500, margin: 0, color: stat.color, fontFamily: "Georgia, serif" }}>{stat.value}</p>
+            <div key={stat.label} style={{ flex: 1, minWidth: 100, background: "#fff8f5", border: "0.5px solid #e0b8b0", borderRadius: 16, padding: "18px 16px", textAlign: "center" }}>
+              <p style={{ fontSize: 34, fontWeight: 500, margin: 0, color: stat.color, fontFamily: "Georgia, serif" }}>{stat.value}</p>
               <p style={{ color: "#b07878", fontSize: 11, margin: "6px 0 0", textTransform: "uppercase", letterSpacing: 1 }}>{stat.label}</p>
             </div>
           ))}
@@ -212,48 +348,63 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Daily Report per Driver */}
+        {Object.keys(driverStats).length > 0 && (
+          <div style={card}>
+            <h2 style={{ color: "#2c1a1a", fontSize: 18, margin: "0 0 16px", fontFamily: "Georgia, serif", fontWeight: 500 }}>📊 Tagesbericht</h2>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {Object.entries(driverStats).map(([name, s]) => (
+                <div key={name} style={{ background: "#fdf6f0", border: "0.5px solid #e0b8b0", borderRadius: 14, padding: "14px 18px", minWidth: 160 }}>
+                  <p style={{ color: "#2c1a1a", fontFamily: "Georgia, serif", fontSize: 15, fontWeight: 500, margin: "0 0 10px" }}>{name}</p>
+                  <p style={{ color: "#3a7a50", fontSize: 13, margin: "3px 0" }}>✅ Geliefert: {s.delivered}</p>
+                  <p style={{ color: "#b07830", fontSize: 13, margin: "3px 0" }}>⏳ Offen: {s.pending}</p>
+                  <p style={{ color: "#9a4a4a", fontSize: 13, margin: "3px 0" }}>❌ Falsch: {s.wrong}</p>
+                  <div style={{ marginTop: 8, height: 4, background: "#f0ddd8", borderRadius: 999, overflow: "hidden" }}>
+                    <div style={{ height: "100%", background: "#c08878", width: `${s.total > 0 ? Math.round((s.delivered / s.total) * 100) : 0}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Upload Card */}
-        <div style={{ background: "#fff8f5", padding: 28, borderRadius: 20, marginBottom: 24, border: "0.5px solid #e0b8b0" }}>
-          <h1 style={{ color: "#2c1a1a", fontSize: 24, margin: "0 0 20px", fontFamily: "Georgia, serif", fontWeight: 500 }}>Tour Upload</h1>
+        <div style={card}>
+          <h2 style={{ color: "#2c1a1a", fontSize: 20, margin: "0 0 20px", fontFamily: "Georgia, serif", fontWeight: 500 }}>Tour Upload</h2>
           <label style={{ display: "block", color: "#b07878", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Fahrer auswählen</label>
-          <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value)} style={{ width: 300, padding: "10px 14px", borderRadius: 10, background: "#fdf6f0", border: "0.5px solid #d4a8a8", color: "#2c1a1a", fontSize: 14 }}>
+          <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value)} style={{ ...inp, width: 300, marginBottom: 16 }}>
             <option value="">– Fahrer wählen –</option>
             {drivers.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
           </select>
-          <label style={{ display: "block", color: "#b07878", fontSize: 11, margin: "16px 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>PDF-Datei</label>
+          <label style={{ display: "block", color: "#b07878", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>PDF-Datei</label>
           <input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} style={{ display: "block", marginBottom: 4, color: "#8a7070" }} />
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
-            <button onClick={uploadPDF} disabled={loading || !file || !selectedDriver} style={{ background: "#dde8f5", color: "#4a6a9a", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: "bold", cursor: "pointer", fontSize: 13, opacity: loading ? 0.6 : 1 }}>
+            <button onClick={uploadPDF} disabled={loading || !file || !selectedDriver} style={btn("#dde8f5", "#4a6a9a", loading || !file || !selectedDriver)}>
               {loading ? "⏳ Lädt…" : "📄 PDF lesen"}
             </button>
-            <button onClick={resetStatuses} disabled={resetting} style={{ background: "#ddf0e0", color: "#3a7a50", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: "bold", cursor: "pointer", fontSize: 13, opacity: resetting ? 0.6 : 1 }}>
+            <button onClick={resetStatuses} disabled={resetting} style={btn("#ddf0e0", "#3a7a50", resetting)}>
               {resetting ? "⏳ Lädt…" : "🔄 Status zurücksetzen"}
             </button>
-            <button onClick={deletePlan} disabled={deletingPlan || !selectedDriver} style={{ background: "#f5dddd", color: "#9a4a4a", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: "bold", cursor: "pointer", fontSize: 13, opacity: deletingPlan ? 0.6 : 1 }}>
+            <button onClick={deletePlan} disabled={deletingPlan || !selectedDriver} style={btn("#f5dddd", "#9a4a4a", deletingPlan || !selectedDriver)}>
               {deletingPlan ? "⏳ Löscht…" : "🗑️ Plan löschen"}
             </button>
-            <button onClick={exportCSV} style={{ background: "#f0eaf5", color: "#8a5a9a", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: "bold", cursor: "pointer", fontSize: 13 }}>
-              📤 CSV Export
-            </button>
+            <button onClick={exportCSV} style={btn("#f0eaf5", "#8a5a9a")}>📤 CSV Export</button>
+            <button onClick={printList} style={btn("#fdeedd", "#9a6030")}>🖨️ Drucken</button>
           </div>
         </div>
 
         {/* Filter */}
         <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap", alignItems: "center" }}>
           <input type="text" placeholder="🔍 Name oder Adresse suchen…" value={search} onChange={(e) => setSearch(e.target.value)}
-            style={{ flex: 2, minWidth: 200, padding: "10px 14px", borderRadius: 10, background: "#fff8f5", border: "0.5px solid #d4a8a8", color: "#2c1a1a", fontSize: 14 }} />
-          <select value={filterDriver} onChange={(e) => setFilterDriver(e.target.value)}
-            style={{ flex: 1, minWidth: 150, padding: "10px 14px", borderRadius: 10, background: "#fff8f5", border: "0.5px solid #d4a8a8", color: "#2c1a1a", fontSize: 14 }}>
+            style={{ ...inp, flex: 2, minWidth: 200 }} />
+          <select value={filterDriver} onChange={(e) => setFilterDriver(e.target.value)} style={{ ...inp, flex: 1, minWidth: 150 }}>
             <option value="all">Alle Fahrer</option>
             {drivers.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
           </select>
-          <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)}
-            style={{ flex: 1, minWidth: 150, padding: "10px 14px", borderRadius: 10, background: "#fff8f5", border: "0.5px solid #d4a8a8", color: "#2c1a1a", fontSize: 14 }} />
+          <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...inp, flex: 1, minWidth: 150 }} />
           {(search || filterDriver !== "all" || filterDate) && (
             <button onClick={() => { setSearch(""); setFilterDriver("all"); setFilterDate(""); }}
-              style={{ background: "#f5e8e0", color: "#b07878", border: "0.5px solid #d4a8a8", borderRadius: 10, padding: "10px 16px", fontWeight: "bold", cursor: "pointer", fontSize: 13 }}>
-              ✕ Reset
-            </button>
+              style={btn("#f5e8e0", "#b07878")}>✕ Reset</button>
           )}
         </div>
 
@@ -267,15 +418,23 @@ export default function AdminPage() {
                 {title}
                 <span style={{ background: "#fff8f5", color: "#8a7070", fontSize: 12, borderRadius: 999, padding: "2px 12px", border: "0.5px solid #e0b8b0" }}>{items.length}</span>
               </h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))", gap: 14 }}>
                 {items.map((stop) => (
                   <div key={stop.id} style={{ background: "#fff8f5", padding: 18, borderRadius: 14, border: `0.5px solid ${color}` }}>
                     <p style={{ color: "#2c1a1a", margin: "0 0 8px", fontSize: 15, fontWeight: 500, fontFamily: "Georgia, serif" }}>{stop.name}</p>
                     <p style={{ color: "#8a7070", margin: "3px 0", fontSize: 13 }}>📍 {stop.adresse}</p>
                     {stop.telefon && <p style={{ color: "#8a7070", margin: "3px 0", fontSize: 13 }}>📞 {stop.telefon}</p>}
                     {stop.notiz && <p style={{ color: "#8a7070", margin: "3px 0", fontSize: 13 }}>📝 {stop.notiz}</p>}
-                    <p style={{ color, margin: "8px 0 0", fontSize: 13, fontWeight: 500 }}>🚚 {stop.fahrer}</p>
+                    {stop.nachbar && <p style={{ color: "#9a6030", margin: "3px 0", fontSize: 13 }}>🏠 Nachbar: {stop.nachbar}</p>}
+                    <p style={{ color, margin: "8px 0 4px", fontSize: 13, fontWeight: 500 }}>🚚 {stop.fahrer}</p>
                     {stop.deliveredDate && <p style={{ color: "#3a7a50", margin: "3px 0", fontSize: 13 }}>📅 {stop.deliveredDate} {stop.deliveredTime}</p>}
+                    <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                      {stop.photoURL && (
+                        <button onClick={() => setPhotoModal(stop)} style={btn("#e8e0f5", "#6a5aaa")}>📸 Foto</button>
+                      )}
+                      <button onClick={() => { setEditStop(stop); setEditNotiz(stop.notiz ?? ""); }} style={btn("#dde8f5", "#4a6a9a")}>✏️ Notiz</button>
+                      <button onClick={() => { if (confirm("Stopp löschen?")) deleteDoc(doc(db, "touren", stop.id)).then(() => showToast("Gelöscht ✅")); }} style={btn("#f5dddd", "#9a4a4a")}>🗑️</button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -287,9 +446,14 @@ export default function AdminPage() {
           <div style={{ textAlign: "center", padding: "60px 0" }}>
             <p style={{ color: "#8a7070", fontSize: 16 }}>Keine Ergebnisse gefunden</p>
             <button onClick={() => { setSearch(""); setFilterDriver("all"); setFilterDate(""); }}
-              style={{ background: "#f5e8e0", color: "#b07878", border: "0.5px solid #d4a8a8", borderRadius: 10, padding: "10px 18px", fontWeight: "bold", cursor: "pointer", fontSize: 13, marginTop: 12 }}>
-              Filter zurücksetzen
-            </button>
+              style={{ ...btn("#f5e8e0", "#b07878"), marginTop: 12 }}>Filter zurücksetzen</button>
+          </div>
+        )}
+
+        {tour.length === 0 && (
+          <div style={{ textAlign: "center", padding: "80px 0" }}>
+            <p style={{ fontSize: 48, margin: 0 }}>🌷</p>
+            <p style={{ color: "#b07878", fontSize: 16, fontFamily: "Georgia, serif", marginTop: 12 }}>Noch keine Stopps. PDF hochladen!</p>
           </div>
         )}
       </div>

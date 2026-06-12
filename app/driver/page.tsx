@@ -197,17 +197,13 @@ export default function DriverPage() {
         100
       : 0;
 
-  const sortedTour = [...tour].sort(
-    (a, b) => {
-      if (!a.status && b.status)
-        return -1;
-
-      if (a.status && !b.status)
-        return 1;
-
-      return 0;
-    }
-  );
+  const sortedTour = [...tour].sort((a, b) => {
+    const orderA = (a as Stop & { order?: number }).order ?? 9999;
+    const orderB = (b as Stop & { order?: number }).order ?? 9999;
+    if (!a.status && b.status) return -1;
+    if (a.status && !b.status) return 1;
+    return orderA - orderB;
+  });
 
   if (!loggedIn) {
     return (
