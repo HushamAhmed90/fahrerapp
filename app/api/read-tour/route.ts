@@ -3,30 +3,24 @@ import OpenAI from "openai";
 
 export const runtime = "nodejs";
 
-const openai = new OpenAI({
-  apiKey: (process.env.OPENAI_API_KEY ?? "").split(/\s+/)[0],
-});
-
 export async function GET() {
-  return NextResponse.json({
-    success: true,
-  });
+  return NextResponse.json({ success: true });
 }
 
 export async function POST(request: Request) {
   try {
-    const formData =
-      await request.formData();
+    const openai = new OpenAI({
+      apiKey: (process.env.OPENAI_API_KEY ?? "").trim().split(/\s+/)[0],
+    });
 
-    const file = formData.get(
-      "file"
-    ) as File | null;
+    const formData = await request.formData();
+
+    const file = formData.get("file") as File | null;
 
     if (!file) {
       return NextResponse.json({
         success: false,
-        error:
-          "Keine PDF-Datei gefunden",
+        error: "Keine PDF-Datei gefunden",
       });
     }
 
