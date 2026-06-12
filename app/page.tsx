@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
-// ❌ خاطئ
-import { db } from "../../firebase";
-
-// ✅ صحيح
+import { db } from "../firebase";
 import { db } from "../firebase";
 type Stop = {
   id: string;
