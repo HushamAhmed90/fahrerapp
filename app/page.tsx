@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
-import { db } from "../firebase";
-import { db } from "../firebase";
+import { db } from "../../firebase";
+
 type Stop = {
   id: string;
   name?: string;
