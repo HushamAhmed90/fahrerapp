@@ -4,7 +4,7 @@ import OpenAI from "openai";
 export const runtime = "nodejs";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: (process.env.OPENAI_API_KEY ?? "").split(/\s+/)[0],
 });
 
 export async function GET() {
