@@ -44,7 +44,7 @@ export default function AdminPage() {
   const [deletingPlan, setDeletingPlan] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [search, setSearch] = useState("");
-  const [filterDriver, setFilterDriver] = useState("");
+  const [filterDriver, setFilterDriver] = useState("all");
   const [filterDate, setFilterDate] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -66,10 +66,7 @@ export default function AdminPage() {
           .map((d) => ({ id: d.id, ...(d.data() as Omit<Driver, "id">) }))
           .filter((d) => d.active);
         setDrivers(list);
-        if (list.length > 0) {
-  setSelectedDriver(list[0].name);
-  setFilterDriver(list[0].name);
-}
+        if (list.length > 0) setSelectedDriver(list[0].name);
       } catch {
         showToast("Fahrer konnten nicht geladen werden.", "error");
       }
@@ -123,26 +120,7 @@ export default function AdminPage() {
     stats.total > 0
       ? Math.round(((stats.total - stats.pending) / stats.total) * 100)
       : 0;
-// ─── Setup Drivers ───────────────────────────────────────────────────────────
 
-async function setupDrivers() {
-  const ALL_DRIVERS = ["mohammed", "Hisham", "Mahmoud", "Rainer", "Hans"];
-  const PASSWORD = "19901990";
-  try {
-    for (const name of ALL_DRIVERS) {
-      const q = query(collection(db, "drivers"), where("name", "==", name));
-      const snapshot = await getDocs(q);
-      if (snapshot.empty) {
-        await addDoc(collection(db, "drivers"), { name, active: true, password: PASSWORD });
-      } else {
-        await updateDoc(doc(db, "drivers", snapshot.docs[0].id), { active: true, password: PASSWORD });
-      }
-    }
-    showToast("✅ Alle Fahrer eingerichtet!");
-  } catch {
-    showToast("Fehler beim Setup", "error");
-  }
-}
   // ─── Upload PDF ───────────────────────────────────────────────────────────
 
   async function uploadPDF() {
@@ -294,10 +272,7 @@ async function setupDrivers() {
           <h1 style={S.heading}>Tour Upload</h1>
 
           <label style={S.label}>Fahrer auswählen</label>
-          <select value={selectedDriver} onChange={(e) => {
-  setSelectedDriver(e.target.value);
-  setFilterDriver(e.target.value);
-}} style={S.select}>
+          <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value)} style={S.select}>
             <option value="">– Fahrer wählen –</option>
             {drivers.map((d) => (
               <option key={d.id} value={d.name}>{d.name}</option>
@@ -326,9 +301,7 @@ async function setupDrivers() {
             </button>
             <button onClick={exportCSV} style={{ ...S.btn, ...S.btnGray }}>
               📤 CSV Export
-            <button onClick={setupDrivers} style={{ ...S.btn, ...S.btnGray }}>
-  🔧 Setup Fahrer
-</button>
+            </button>
           </div>
         </div>
 
