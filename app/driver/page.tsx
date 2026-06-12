@@ -50,10 +50,7 @@ export default function DriverPage() {
       password: "2222",
     },
 
-    {
-      name: "Mahmoud",
-      password: "3333",
-    },
+    
 
     {
       name: "Rainer",
