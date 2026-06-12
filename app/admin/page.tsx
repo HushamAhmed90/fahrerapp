@@ -123,7 +123,26 @@ export default function AdminPage() {
     stats.total > 0
       ? Math.round(((stats.total - stats.pending) / stats.total) * 100)
       : 0;
+// ─── Setup Drivers ───────────────────────────────────────────────────────────
 
+async function setupDrivers() {
+  const ALL_DRIVERS = ["mohammed", "Hisham", "Mahmoud", "Rainer", "Hans"];
+  const PASSWORD = "19901990";
+  try {
+    for (const name of ALL_DRIVERS) {
+      const q = query(collection(db, "drivers"), where("name", "==", name));
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) {
+        await addDoc(collection(db, "drivers"), { name, active: true, password: PASSWORD });
+      } else {
+        await updateDoc(doc(db, "drivers", snapshot.docs[0].id), { active: true, password: PASSWORD });
+      }
+    }
+    showToast("✅ Alle Fahrer eingerichtet!");
+  } catch {
+    showToast("Fehler beim Setup", "error");
+  }
+}
   // ─── Upload PDF ───────────────────────────────────────────────────────────
 
   async function uploadPDF() {
@@ -307,7 +326,9 @@ export default function AdminPage() {
             </button>
             <button onClick={exportCSV} style={{ ...S.btn, ...S.btnGray }}>
               📤 CSV Export
-            </button>
+            <button onClick={setupDrivers} style={{ ...S.btn, ...S.btnGray }}>
+  🔧 Setup Fahrer
+</button>
           </div>
         </div>
 
