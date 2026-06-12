@@ -44,7 +44,7 @@ export default function AdminPage() {
   const [deletingPlan, setDeletingPlan] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [search, setSearch] = useState("");
-  const [filterDriver, setFilterDriver] = useState("all");
+  const [filterDriver, setFilterDriver] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -66,7 +66,10 @@ export default function AdminPage() {
           .map((d) => ({ id: d.id, ...(d.data() as Omit<Driver, "id">) }))
           .filter((d) => d.active);
         setDrivers(list);
-        if (list.length > 0) setSelectedDriver(list[0].name);
+        if (list.length > 0) {
+  setSelectedDriver(list[0].name);
+  setFilterDriver(list[0].name);
+}
       } catch {
         showToast("Fahrer konnten nicht geladen werden.", "error");
       }
@@ -272,7 +275,10 @@ export default function AdminPage() {
           <h1 style={S.heading}>Tour Upload</h1>
 
           <label style={S.label}>Fahrer auswählen</label>
-          <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value)} style={S.select}>
+          <select value={selectedDriver} onChange={(e) => {
+  setSelectedDriver(e.target.value);
+  setFilterDriver(e.target.value);
+}} style={S.select}>
             <option value="">– Fahrer wählen –</option>
             {drivers.map((d) => (
               <option key={d.id} value={d.name}>{d.name}</option>
