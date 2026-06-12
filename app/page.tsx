@@ -40,20 +40,12 @@ export default function DriverPage() {
     useState(false);
 
   const drivers = [
-    {
-      name: "mohammed",
-      password: "1234",
-    },
-
-    {
-      name: "Hisham",
-      password: "2222",
-    },
-
-    {
-      name: "Mahmoud",
-      password: "3333",
-    },
+  { name: "mohammed", password: "19901990" },
+  { name: "HushamAhmed",   password: "19901990" },
+  
+  { name: "Rainer",   password: "19901990" },
+  { name: "Hannes",     password: "19901990" },
+];
 
     {
       name: "Rainer",
