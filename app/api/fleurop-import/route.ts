@@ -66,43 +66,51 @@ async function login(): Promise<{ cookies: string; debug: Record<string, unknown
   };
 }
 
-async function fetchOrders(cookies: string): Promise<{ name: string; adresse: string; telefon: string; notiz: string; order: number }[]> {
-  const today = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+async function fetchOrders(cookies: string): Promise<{ html: string; stops: { name: string; adresse: string; telefon: string; notiz: string; order: number }[] }> {
+  // Use the discovered orders page
+  const urls = [
+    `${BASE}/fleurop-intern/auftragsabwicklung-mit-merkur`,
+    `${BASE}/auftrag/list?status=zu_liefern`,
+    `${BASE}/auftrag/`,
+  ];
 
-  const res = await fetch(
-    `${BASE}/auftrag/list?status=zu_liefern&lieferdatum_von=${today}&lieferdatum_bis=${today}`,
-    {
-      headers: {
-        Cookie: cookies,
-        "User-Agent": "Mozilla/5.0",
-      },
+  let html = "";
+  for (const url of urls) {
+    const res = await fetch(url, { headers: { Cookie: cookies, "User-Agent": "Mozilla/5.0" } });
+    const text = await res.text();
+    if (text.includes("Auftrag") || text.includes("Empfänger") || text.includes("liefern")) {
+      html = text;
+      break;
     }
-  );
+    html = text; // fallback: use last result
+  }
 
-  const html = await res.text();
   const $ = cheerio.load(html);
   const stops: { name: string; adresse: string; telefon: string; notiz: string; order: number }[] = [];
 
   let idx = 1;
   $("table tr").each((_, row) => {
     const cells = $(row).find("td");
-    if (cells.length < 4) return;
+    if (cells.length < 3) return;
 
-    const empfaenger = $(cells[3]).text().trim();
-    if (!empfaenger || empfaenger.includes("Empfänger")) return;
-
-    // Parse "Name, Straße Hausnr, PLZ Stadt"
-    const lines = empfaenger.split("\n").map(l => l.trim()).filter(Boolean);
-    if (lines.length < 2) return;
-
-    const name = lines[0];
-    const adresse = lines.slice(1).join(", ");
-    const auftrNr = $(cells[0]).text().trim();
-
-    stops.push({ name, adresse, telefon: "", notiz: `Fleurop ${auftrNr}`, order: idx++ });
+    // Try each cell for address-like content
+    cells.each((i, cell) => {
+      const text = $(cell).text().trim();
+      const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+      // Look for cells with name + address pattern (has a postal code)
+      if (lines.length >= 2 && /\d{5}/.test(text)) {
+        const name = lines[0];
+        const adresse = lines.slice(1).join(", ");
+        const auftrNr = $($(row).find("td")[0]).text().trim();
+        if (!auftrNr.includes("Nr") && !auftrNr.includes("Auftrag")) {
+          stops.push({ name, adresse, telefon: "", notiz: `Fleurop ${auftrNr}`, order: idx++ });
+          return false; // break each loop
+        }
+      }
+    });
   });
 
-  return stops;
+  return { html: html.slice(0, 1000), stops };
 }
 
 export async function POST() {
@@ -141,12 +149,12 @@ export async function POST() {
       }
     });
 
-    const stops = await fetchOrders(cookies);
+    const { html: ordersHtml, stops } = await fetchOrders(cookies);
 
     return NextResponse.json({
       success: stops.length > 0,
       stops,
-      debug: { ...loginDebug, pageTitle, isLoggedIn, stopsFound: stops.length, mainLinks: mainLinks.slice(0, 10), urlResults }
+      debug: { ...loginDebug, pageTitle, isLoggedIn, stopsFound: stops.length, mainLinks: mainLinks.slice(0, 10), ordersHtmlPreview: ordersHtml.slice(0, 500) }
     });
   } catch (e: unknown) {
     return NextResponse.json({ success: false, message: String(e) });
