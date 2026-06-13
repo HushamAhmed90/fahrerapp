@@ -178,6 +178,34 @@ export default function AdminPage() {
     finally { setLoading(false); }
   }
 
+  const [fleuropLoading, setFleuropLoading] = useState(false);
+
+  async function importFleurop() {
+    if (!selectedDriver) { showToast("Bitte Fahrer auswählen", "error"); return; }
+    setFleuropLoading(true);
+    try {
+      const res = await fetch("/api/fleurop-import", { method: "POST" });
+      const result = await res.json();
+      if (!result.success) { showToast(result.message ?? "Fehler", "error"); return; }
+      for (let i = 0; i < result.stops.length; i++) {
+        const s = result.stops[i];
+        await addDoc(collection(db, "touren"), {
+          name: s.name ?? "",
+          adresse: s.adresse ?? "",
+          telefon: s.telefon ?? "",
+          notiz: s.notiz ?? "",
+          fahrer: selectedDriver,
+          status: "",
+          deliveredDate: "",
+          deliveredTime: "",
+          order: s.order ?? i,
+        });
+      }
+      showToast(`${result.stops.length} Aufträge von Fleurop importiert ✅`);
+    } catch { showToast("Fehler beim Fleurop Import", "error"); }
+    finally { setFleuropLoading(false); }
+  }
+
   async function deletePlan() {
     if (!selectedDriver) return;
     if (!confirm(`Plan von ${selectedDriver} löschen?`)) return;
@@ -381,6 +409,9 @@ export default function AdminPage() {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
             <button onClick={uploadPDF} disabled={loading || !file || !selectedDriver} style={btn("#dde8f5", "#4a6a9a", loading || !file || !selectedDriver)}>
               {loading ? "⏳ Lädt…" : "📄 PDF lesen"}
+            </button>
+            <button onClick={importFleurop} disabled={fleuropLoading || !selectedDriver} style={btn("#fff3cd", "#856404", fleuropLoading || !selectedDriver)}>
+              {fleuropLoading ? "⏳ Importiere…" : "🌸 Fleurop importieren"}
             </button>
             <button onClick={resetStatuses} disabled={resetting} style={btn("#ddf0e0", "#3a7a50", resetting)}>
               {resetting ? "⏳ Lädt…" : "🔄 Status zurücksetzen"}
