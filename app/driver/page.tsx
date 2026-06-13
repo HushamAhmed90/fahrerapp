@@ -141,19 +141,6 @@ export default function DriverPage() {
         {/* LEFT — Bremen + info */}
         <div className="login-side" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <BremenCrestCard />
-          <div style={{ ...S.card, padding: "16px 18px" }}>
-            <p style={{ color: "#b91c1c", fontSize: 11, fontWeight: 600, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>Lieferzeiten</p>
-            {[
-              { label: "Mo – Fr", time: "04:30 – 10:00 Uhr" },
-              { label: "Samstag", time: "04:30 – 09:00 Uhr" },
-              { label: "Standort", time: "Am Waller Freihafen 1" },
-            ].map(o => (
-              <div key={o.label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ color: "#9ca3af", fontSize: 12 }}>{o.label}</span>
-                <span style={{ color: "#1c1c1c", fontSize: 12, fontWeight: 600 }}>{o.time}</span>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* CENTER — Logo big + form below */}
@@ -174,12 +161,6 @@ export default function DriverPage() {
         {/* RIGHT — Clock + flowers info */}
         <div className="login-side" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <DigitalClock />
-          <div style={{ ...S.card, padding: "16px 18px" }}>
-            <p style={{ color: "#b91c1c", fontSize: 11, fontWeight: 600, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>Sortiment</p>
-            {["🌹 Rosen", "🌷 Tulpen", "🌸 Lilien", "🌼 Chrysanthemen", "🌿 Schnittgrün", "💐 Sträuße"].map(item => (
-              <div key={item} style={{ color: "#4b5563", fontSize: 12, padding: "4px 0", borderBottom: "1px solid #fde8e8" }}>{item}</div>
-            ))}
-          </div>
         </div>
 
       </div>
