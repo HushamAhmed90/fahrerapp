@@ -178,6 +178,47 @@ export default function AdminPage() {
     finally { setLoading(false); }
   }
 
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<{ name: string; adresse: string; notiz: string }[] | null>(null);
+
+  async function readPhoto() {
+    if (!photoFile) { showToast("Bitte Foto wählen", "error"); return; }
+    setPhotoLoading(true);
+    setPhotoPreview(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", photoFile);
+      const res = await fetch("/api/read-photo", { method: "POST", body: formData });
+      const result = await res.json();
+      if (!result.success) { showToast(result.error ?? "Fehler beim Lesen", "error"); return; }
+      setPhotoPreview(result.data);
+      showToast(`${result.data.length} Stops erkannt ✅`);
+    } catch { showToast("Fehler beim Foto-Upload", "error"); }
+    finally { setPhotoLoading(false); }
+  }
+
+  async function importPhotoStops() {
+    if (!photoPreview || !selectedDriver) { showToast("Bitte Fahrer auswählen", "error"); return; }
+    for (let i = 0; i < photoPreview.length; i++) {
+      const item = photoPreview[i];
+      await addDoc(collection(db, "touren"), {
+        name: item.name ?? "",
+        adresse: item.adresse ?? "",
+        telefon: "",
+        notiz: item.notiz ?? "",
+        fahrer: selectedDriver,
+        status: "",
+        deliveredDate: "",
+        deliveredTime: "",
+        order: (tour.filter(s => s.fahrer === selectedDriver).length) + i,
+      });
+    }
+    showToast(`${photoPreview.length} Stops importiert ✅`);
+    setPhotoPreview(null);
+    setPhotoFile(null);
+  }
+
   const [fleuropLoading, setFleuropLoading] = useState(false);
 
   async function importFleurop() {
@@ -408,6 +449,33 @@ export default function AdminPage() {
             <option value="">– Fahrer wählen –</option>
             {drivers.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
           </select>
+          {/* Photo import */}
+          <div style={{ background: "#fdf6f0", border: "1px dashed #e0b8b0", borderRadius: 14, padding: "16px 18px", marginBottom: 16 }}>
+            <p style={{ color: "#7c2d12", fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>📸 Foto / WhatsApp-Bild importieren</p>
+            <input type="file" accept="image/*" onChange={(e) => { setPhotoFile(e.target.files?.[0] ?? null); setPhotoPreview(null); }}
+              style={{ display: "block", marginBottom: 10, color: "#8a7070", fontSize: 13 }} />
+            <button onClick={readPhoto} disabled={photoLoading || !photoFile} style={btn("#fde8d0", "#9a5a20", photoLoading || !photoFile)}>
+              {photoLoading ? "⏳ KI liest…" : "🤖 KI liest Handschrift"}
+            </button>
+            {photoPreview && (
+              <div style={{ marginTop: 14 }}>
+                <p style={{ color: "#3a7a50", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>✅ {photoPreview.length} Stops erkannt — bitte prüfen:</p>
+                <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 10 }}>
+                  {photoPreview.map((s, i) => (
+                    <div key={i} style={{ background: "white", border: "1px solid #f0ddd8", borderRadius: 10, padding: "8px 12px", marginBottom: 6, fontSize: 13 }}>
+                      <strong style={{ color: "#2c1a1a" }}>{i + 1}. {s.name}</strong>
+                      <p style={{ color: "#6b5050", margin: "2px 0 0" }}>📍 {s.adresse}</p>
+                      {s.notiz && <p style={{ color: "#9a6030", margin: "2px 0 0", fontSize: 12 }}>📝 {s.notiz}</p>}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={importPhotoStops} disabled={!selectedDriver} style={btn("#ddf0e0", "#3a7a50", !selectedDriver)}>
+                  ✅ Alle importieren → {selectedDriver || "Fahrer wählen"}
+                </button>
+              </div>
+            )}
+          </div>
+
           <label style={{ display: "block", color: "#b07878", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>PDF-Datei</label>
           <input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} style={{ display: "block", marginBottom: 4, color: "#8a7070" }} />
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
