@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { collection, doc, updateDoc, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../firebase";
+import { BremenCrestCard, DigitalClock } from "../components/HeroExtras";
 
 type Stop = {
   id: string;
@@ -129,19 +130,55 @@ export default function DriverPage() {
 
   // ── Login ────────────────────────────────────────────────
   if (!loggedIn) return (
-    <main style={{ ...S.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ position: "absolute", top: 0, left: 0, width: "26rem", height: "26rem", background: "rgba(251,207,207,0.35)", borderRadius: "50%", transform: "translate(-40%,-40%)", pointerEvents: "none" }} />
-      <div style={{ position: "absolute", bottom: 0, right: 0, width: "20rem", height: "20rem", background: "rgba(254,243,199,0.35)", borderRadius: "50%", transform: "translate(30%,30%)", pointerEvents: "none" }} />
-      <div style={{ ...S.card, maxWidth: 420, width: "100%", padding: 36, position: "relative" }}>
-        <img src="/logo.png" alt="logo" style={{ width: 160, display: "block", margin: "0 auto 24px", objectFit: "contain" }} />
-        <h1 style={{ color: "#7c2d12", textAlign: "center", fontSize: 26, fontWeight: "bold", marginBottom: 24 }}>Fahrer Login</h1>
-        <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && login()}
-          style={{ width: "100%", padding: 14, marginBottom: 12, borderRadius: 14, border: "1.5px solid #f3d5d5", fontSize: 15, background: "#fff9f7", boxSizing: "border-box", color: "#1c1c1c" }} />
-        <input type="password" placeholder="Passwort" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && login()}
-          style={{ width: "100%", padding: 14, marginBottom: 20, borderRadius: 14, border: "1.5px solid #f3d5d5", fontSize: 15, background: "#fff9f7", boxSizing: "border-box", color: "#1c1c1c" }} />
-        <button onClick={login} style={{ width: "100%", padding: 15, border: "none", borderRadius: 14, background: "#b91c1c", color: "white", fontWeight: "bold", fontSize: 17, cursor: "pointer" }}>
-          Anmelden
-        </button>
+    <main style={{ ...S.page, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+      {/* Blobs */}
+      <div style={{ position: "fixed", top: 0, left: 0, width: "26rem", height: "26rem", background: "rgba(251,207,207,0.35)", borderRadius: "50%", transform: "translate(-40%,-40%)", pointerEvents: "none" }} />
+      <div style={{ position: "fixed", bottom: 0, right: 0, width: "20rem", height: "20rem", background: "rgba(254,243,199,0.35)", borderRadius: "50%", transform: "translate(30%,30%)", pointerEvents: "none" }} />
+
+      <div style={{ maxWidth: 1000, width: "100%", padding: "0 24px", display: "grid", gridTemplateColumns: "1fr 1.2fr 1fr", gap: 28, alignItems: "center", position: "relative", zIndex: 1 }}>
+
+        {/* LEFT — Bremen + info */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <BremenCrestCard />
+          <div style={{ ...S.card, padding: "16px 18px" }}>
+            <p style={{ color: "#b91c1c", fontSize: 11, fontWeight: 600, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>Lieferzeiten</p>
+            {[
+              { label: "Mo – Fr", time: "04:30 – 10:00 Uhr" },
+              { label: "Samstag", time: "04:30 – 09:00 Uhr" },
+              { label: "Standort", time: "Am Waller Freihafen 1" },
+            ].map(o => (
+              <div key={o.label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ color: "#9ca3af", fontSize: 12 }}>{o.label}</span>
+                <span style={{ color: "#1c1c1c", fontSize: 12, fontWeight: 600 }}>{o.time}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* CENTER — Logo + form */}
+        <div style={{ ...S.card, padding: 36, textAlign: "center" }}>
+          <img src="/logo.png" alt="logo" style={{ width: 180, display: "block", margin: "0 auto 20px", objectFit: "contain" }} />
+          <h1 style={{ color: "#7c2d12", fontSize: 24, fontWeight: "bold", marginBottom: 22 }}>Fahrer Login</h1>
+          <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && login()}
+            style={{ width: "100%", padding: 13, marginBottom: 10, borderRadius: 14, border: "1.5px solid #f3d5d5", fontSize: 15, background: "#fff9f7", boxSizing: "border-box", color: "#1c1c1c" }} />
+          <input type="password" placeholder="Passwort" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && login()}
+            style={{ width: "100%", padding: 13, marginBottom: 18, borderRadius: 14, border: "1.5px solid #f3d5d5", fontSize: 15, background: "#fff9f7", boxSizing: "border-box", color: "#1c1c1c" }} />
+          <button onClick={login} style={{ width: "100%", padding: 14, border: "none", borderRadius: 14, background: "#b91c1c", color: "white", fontWeight: "bold", fontSize: 16, cursor: "pointer", boxShadow: "0 4px 14px rgba(185,28,28,0.25)" }}>
+            Anmelden
+          </button>
+        </div>
+
+        {/* RIGHT — Clock + flowers info */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <DigitalClock />
+          <div style={{ ...S.card, padding: "16px 18px" }}>
+            <p style={{ color: "#b91c1c", fontSize: 11, fontWeight: 600, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>Sortiment</p>
+            {["🌹 Rosen", "🌷 Tulpen", "🌸 Lilien", "🌼 Chrysanthemen", "🌿 Schnittgrün", "💐 Sträuße"].map(item => (
+              <div key={item} style={{ color: "#4b5563", fontSize: 12, padding: "4px 0", borderBottom: "1px solid #fde8e8" }}>{item}</div>
+            ))}
+          </div>
+        </div>
+
       </div>
     </main>
   );
