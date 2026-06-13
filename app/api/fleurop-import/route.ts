@@ -106,9 +106,6 @@ async function fetchOrders(cookies: string): Promise<{ name: string; adresse: st
 }
 
 export async function POST() {
-  // Quick test - remove after debug
-  return NextResponse.json({ success: false, message: "TEST: route works, OpenAI key: " + (process.env.OPENAI_API_KEY ? "SET" : "NOT SET") });
-
   try {
     const { cookies, debug: loginDebug } = await login();
 
