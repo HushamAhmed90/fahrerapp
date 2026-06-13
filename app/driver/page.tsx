@@ -135,10 +135,11 @@ export default function DriverPage() {
       <div style={{ position: "fixed", top: 0, left: 0, width: "26rem", height: "26rem", background: "rgba(251,207,207,0.35)", borderRadius: "50%", transform: "translate(-40%,-40%)", pointerEvents: "none" }} />
       <div style={{ position: "fixed", bottom: 0, right: 0, width: "20rem", height: "20rem", background: "rgba(254,243,199,0.35)", borderRadius: "50%", transform: "translate(30%,30%)", pointerEvents: "none" }} />
 
-      <div style={{ maxWidth: 1000, width: "100%", padding: "0 24px", display: "grid", gridTemplateColumns: "1fr 1.2fr 1fr", gap: 28, alignItems: "center", position: "relative", zIndex: 1 }}>
+      <style>{`@media(max-width:700px){.login-grid{grid-template-columns:1fr!important}.login-side{display:flex!important}}`}</style>
+      <div className="login-grid" style={{ maxWidth: 1000, width: "100%", padding: "24px 20px", display: "grid", gridTemplateColumns: "1fr 1.2fr 1fr", gap: 24, alignItems: "start", position: "relative", zIndex: 1 }}>
 
         {/* LEFT — Bremen + info */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="login-side" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <BremenCrestCard />
           <div style={{ ...S.card, padding: "16px 18px" }}>
             <p style={{ color: "#b91c1c", fontSize: 11, fontWeight: 600, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>Lieferzeiten</p>
@@ -171,7 +172,7 @@ export default function DriverPage() {
         </div>
 
         {/* RIGHT — Clock + flowers info */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="login-side" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <DigitalClock />
           <div style={{ ...S.card, padding: "16px 18px" }}>
             <p style={{ color: "#b91c1c", fontSize: 11, fontWeight: 600, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>Sortiment</p>
