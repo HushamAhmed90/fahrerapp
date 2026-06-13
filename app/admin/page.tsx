@@ -460,12 +460,20 @@ export default function AdminPage() {
             {photoPreview && (
               <div style={{ marginTop: 14 }}>
                 <p style={{ color: "#3a7a50", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>✅ {photoPreview.length} Stops erkannt — bitte prüfen:</p>
-                <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 10 }}>
+                <div style={{ maxHeight: 320, overflowY: "auto", marginBottom: 10 }}>
                   {photoPreview.map((s, i) => (
-                    <div key={i} style={{ background: "white", border: "1px solid #f0ddd8", borderRadius: 10, padding: "8px 12px", marginBottom: 6, fontSize: 13 }}>
-                      <strong style={{ color: "#2c1a1a" }}>{i + 1}. {s.name}</strong>
-                      <p style={{ color: "#6b5050", margin: "2px 0 0" }}>📍 {s.adresse}</p>
-                      {s.notiz && <p style={{ color: "#9a6030", margin: "2px 0 0", fontSize: 12 }}>📝 {s.notiz}</p>}
+                    <div key={i} style={{ background: "white", border: "1px solid #f0ddd8", borderRadius: 10, padding: "10px 12px", marginBottom: 8, fontSize: 13 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                        <span style={{ color: "#b07878", fontWeight: 600, minWidth: 20 }}>{i + 1}.</span>
+                        <input value={s.name} onChange={e => setPhotoPreview(prev => prev!.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                          placeholder="Name" style={{ flex: 1, padding: "4px 8px", borderRadius: 8, border: "1px solid #f0ddd8", fontSize: 13, color: "#2c1a1a" }} />
+                        <button onClick={() => setPhotoPreview(prev => prev!.filter((_, j) => j !== i))}
+                          style={{ background: "#fee2e2", border: "none", borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: "#991b1b", fontSize: 12 }}>✕</button>
+                      </div>
+                      <input value={s.adresse} onChange={e => setPhotoPreview(prev => prev!.map((x, j) => j === i ? { ...x, adresse: e.target.value } : x))}
+                        placeholder="📍 Adresse" style={{ width: "100%", padding: "4px 8px", borderRadius: 8, border: "1px solid #f0ddd8", fontSize: 12, color: "#6b5050", marginBottom: 4, boxSizing: "border-box" }} />
+                      <input value={s.notiz} onChange={e => setPhotoPreview(prev => prev!.map((x, j) => j === i ? { ...x, notiz: e.target.value } : x))}
+                        placeholder="📝 Notiz / Bemerkung" style={{ width: "100%", padding: "4px 8px", borderRadius: 8, border: "1px solid #f0ddd8", fontSize: 12, color: "#9a6030", boxSizing: "border-box" }} />
                     </div>
                   ))}
                 </div>
