@@ -154,7 +154,7 @@ export async function POST() {
     return NextResponse.json({
       success: stops.length > 0,
       stops,
-      debug: { ...loginDebug, pageTitle, isLoggedIn, stopsFound: stops.length, mainLinks: mainLinks.slice(0, 10), ordersHtmlPreview: ordersHtml.slice(0, 500) }
+      debug: { ...loginDebug, pageTitle, isLoggedIn, stopsFound: stops.length, mainLinks: mainLinks.slice(0, 10), ordersBody: ordersHtml.replace(/<head[\s\S]*?<\/head>/i, "").slice(0, 1500) }
     });
   } catch (e: unknown) {
     return NextResponse.json({ success: false, message: String(e) });
