@@ -155,17 +155,19 @@ export default function DriverPage() {
           </div>
         </div>
 
-        {/* CENTER — Logo + form */}
-        <div style={{ ...S.card, padding: 36, textAlign: "center" }}>
-          <img src="/logo.png" alt="logo" style={{ width: 180, display: "block", margin: "0 auto 20px", objectFit: "contain" }} />
-          <h1 style={{ color: "#7c2d12", fontSize: 24, fontWeight: "bold", marginBottom: 22 }}>Fahrer Login</h1>
-          <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && login()}
-            style={{ width: "100%", padding: 13, marginBottom: 10, borderRadius: 14, border: "1.5px solid #f3d5d5", fontSize: 15, background: "#fff9f7", boxSizing: "border-box", color: "#1c1c1c" }} />
-          <input type="password" placeholder="Passwort" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && login()}
-            style={{ width: "100%", padding: 13, marginBottom: 18, borderRadius: 14, border: "1.5px solid #f3d5d5", fontSize: 15, background: "#fff9f7", boxSizing: "border-box", color: "#1c1c1c" }} />
-          <button onClick={login} style={{ width: "100%", padding: 14, border: "none", borderRadius: 14, background: "#b91c1c", color: "white", fontWeight: "bold", fontSize: 16, cursor: "pointer", boxShadow: "0 4px 14px rgba(185,28,28,0.25)" }}>
-            Anmelden
-          </button>
+        {/* CENTER — Logo big + form below */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
+          <img src="/logo.png" alt="logo" style={{ width: "100%", maxWidth: 340, objectFit: "contain", filter: "drop-shadow(0 8px 24px rgba(180,80,80,0.18))" }} />
+          <div style={{ ...S.card, width: "100%", padding: "28px 28px 24px", textAlign: "center" }}>
+            <h1 style={{ color: "#7c2d12", fontSize: 22, fontWeight: "bold", marginBottom: 18 }}>Fahrer Login</h1>
+            <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && login()}
+              style={{ width: "100%", padding: 13, marginBottom: 10, borderRadius: 14, border: "1.5px solid #f3d5d5", fontSize: 15, background: "#fff9f7", boxSizing: "border-box", color: "#1c1c1c" }} />
+            <input type="password" placeholder="Passwort" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && login()}
+              style={{ width: "100%", padding: 13, marginBottom: 16, borderRadius: 14, border: "1.5px solid #f3d5d5", fontSize: 15, background: "#fff9f7", boxSizing: "border-box", color: "#1c1c1c" }} />
+            <button onClick={login} style={{ width: "100%", padding: 14, border: "none", borderRadius: 14, background: "#b91c1c", color: "white", fontWeight: "bold", fontSize: 16, cursor: "pointer", boxShadow: "0 4px 14px rgba(185,28,28,0.25)" }}>
+              Anmelden
+            </button>
+          </div>
         </div>
 
         {/* RIGHT — Clock + flowers info */}
