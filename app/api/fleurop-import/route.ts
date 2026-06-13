@@ -87,13 +87,22 @@ async function fetchOrders(cookies: string): Promise<{ name: string; adresse: st
 export async function POST() {
   try {
     const cookies = await login();
+
+    // Debug: fetch the main page after login to check if logged in
+    const checkRes = await fetch(`${BASE}/`, {
+      headers: { Cookie: cookies, "User-Agent": "Mozilla/5.0" },
+    });
+    const checkHtml = await checkRes.text();
+    const isLoggedIn = !checkHtml.includes("login") && !checkHtml.includes("Anmelden");
+    const pageTitle = checkHtml.match(/<title>(.*?)<\/title>/i)?.[1] ?? "unknown";
+
     const stops = await fetchOrders(cookies);
 
-    if (stops.length === 0) {
-      return NextResponse.json({ success: false, message: "Keine Aufträge gefunden oder Login fehlgeschlagen" });
-    }
-
-    return NextResponse.json({ success: true, stops });
+    return NextResponse.json({
+      success: stops.length > 0,
+      stops,
+      debug: { isLoggedIn, pageTitle, cookieLength: cookies.length, stopsFound: stops.length }
+    });
   } catch (e: unknown) {
     return NextResponse.json({ success: false, message: String(e) });
   }

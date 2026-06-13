@@ -186,7 +186,11 @@ export default function AdminPage() {
     try {
       const res = await fetch("/api/fleurop-import", { method: "POST" });
       const result = await res.json();
-      if (!result.success) { showToast(result.message ?? "Fehler", "error"); return; }
+      if (result.debug) console.log("Fleurop debug:", result.debug);
+      if (!result.success || !result.stops?.length) {
+        showToast(result.message ?? `Debug: ${JSON.stringify(result.debug)}`, "error");
+        return;
+      }
       for (let i = 0; i < result.stops.length; i++) {
         const s = result.stops[i];
         await addDoc(collection(db, "touren"), {
