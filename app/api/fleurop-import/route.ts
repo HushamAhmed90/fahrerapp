@@ -3,46 +3,65 @@ import * as cheerio from "cheerio";
 
 const BASE = "https://merkurportal.fleurop.de";
 
-async function login(): Promise<string> {
-  // Step 1: Get login page to extract any hidden fields
-  const loginPage = await fetch(`${BASE}/?login=1`, { redirect: "follow" });
+async function login(): Promise<{ cookies: string; debug: Record<string, unknown> }> {
+  // Step 1: Get login page
+  const loginPage = await fetch(`${BASE}/?login=1`, {
+    redirect: "follow",
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
   const loginHtml = await loginPage.text();
   const setCookie = loginPage.headers.get("set-cookie") ?? "";
   const sessionCookie = setCookie.split(";")[0];
 
-  // Parse hidden fields
+  // Parse ALL input fields to find correct names
   const $ = cheerio.load(loginHtml);
-  const hiddenFields: Record<string, string> = {};
-  $('input[type="hidden"]').each((_, el) => {
+  const allInputs: Record<string, string> = {};
+  $("input").each((_, el) => {
     const name = $(el).attr("name");
+    const type = $(el).attr("type") ?? "text";
     const value = $(el).attr("value") ?? "";
-    if (name) hiddenFields[name] = value;
+    if (name) allInputs[name] = `${type}=${value}`;
   });
 
-  // Step 2: POST login
-  const formData = new URLSearchParams({
-    ...hiddenFields,
-    username: process.env.FLEUROP_USER ?? "",
-    password: process.env.FLEUROP_PASS ?? "",
+  const formAction = $("form").attr("action") ?? "/?login=1";
+
+  // Build form data with all fields
+  const formData = new URLSearchParams();
+  $('input[type="hidden"]').each((_, el) => {
+    const n = $(el).attr("name"); const v = $(el).attr("value") ?? "";
+    if (n) formData.append(n, v);
   });
 
-  const loginRes = await fetch(`${BASE}/?login=1`, {
+  // Try common field name patterns
+  const userField = Object.keys(allInputs).find(k => /user|name|login|benutz/i.test(k)) ?? "username";
+  const passField = Object.keys(allInputs).find(k => /pass|wort|pwd/i.test(k)) ?? "password";
+
+  formData.append(userField, process.env.FLEUROP_USER ?? "");
+  formData.append(passField, process.env.FLEUROP_PASS ?? "");
+
+  const postUrl = formAction.startsWith("http") ? formAction : `${BASE}${formAction}`;
+
+  const loginRes = await fetch(postUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
       Cookie: sessionCookie,
       "User-Agent": "Mozilla/5.0",
+      Referer: `${BASE}/?login=1`,
     },
     body: formData.toString(),
     redirect: "manual",
   });
 
-  // Collect all cookies
   const allCookies = [sessionCookie];
   const newCookie = loginRes.headers.get("set-cookie");
   if (newCookie) allCookies.push(newCookie.split(";")[0]);
+  const cookies = allCookies.filter(Boolean).join("; ");
 
-  return allCookies.filter(Boolean).join("; ");
+  return {
+    cookies,
+    debug: { allInputs, formAction, postUrl, userField, passField, loginStatus: loginRes.status }
+  };
 }
 
 async function fetchOrders(cookies: string): Promise<{ name: string; adresse: string; telefon: string; notiz: string; order: number }[]> {
@@ -86,22 +105,21 @@ async function fetchOrders(cookies: string): Promise<{ name: string; adresse: st
 
 export async function POST() {
   try {
-    const cookies = await login();
+    const { cookies, debug: loginDebug } = await login();
 
-    // Debug: fetch the main page after login to check if logged in
     const checkRes = await fetch(`${BASE}/`, {
       headers: { Cookie: cookies, "User-Agent": "Mozilla/5.0" },
     });
     const checkHtml = await checkRes.text();
-    const isLoggedIn = !checkHtml.includes("login") && !checkHtml.includes("Anmelden");
     const pageTitle = checkHtml.match(/<title>(.*?)<\/title>/i)?.[1] ?? "unknown";
+    const isLoggedIn = checkHtml.toLowerCase().includes("auftrag") || checkHtml.toLowerCase().includes("abmelden");
 
     const stops = await fetchOrders(cookies);
 
     return NextResponse.json({
       success: stops.length > 0,
       stops,
-      debug: { isLoggedIn, pageTitle, cookieLength: cookies.length, stopsFound: stops.length }
+      debug: { ...loginDebug, pageTitle, isLoggedIn, stopsFound: stops.length }
     });
   } catch (e: unknown) {
     return NextResponse.json({ success: false, message: String(e) });
