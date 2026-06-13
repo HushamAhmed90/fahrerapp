@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 
+export const runtime = "nodejs";
+
 const BASE = "https://merkurportal.fleurop.de";
 
 async function login(): Promise<{ cookies: string; debug: Record<string, unknown> }> {
