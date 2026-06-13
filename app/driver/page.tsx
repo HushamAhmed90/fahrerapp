@@ -25,11 +25,25 @@ const DRIVERS = [
   { name: "Hans",     password: "5555" },
 ];
 
-const btn = (bg: string): React.CSSProperties => ({
-  background: bg, color: "white", border: "none",
-  padding: "11px 16px", borderRadius: 12, fontWeight: "bold",
-  fontSize: 14, cursor: "pointer", flexShrink: 0,
-});
+const S: Record<string, React.CSSProperties> = {
+  page:    { minHeight: "100vh", background: "#fdf6f0", fontFamily: "Arial, sans-serif", padding: "0 0 48px 0" },
+  nav:     { background: "rgba(255,255,255,0.92)", backdropFilter: "blur(8px)", borderBottom: "1px solid #f3d5d5", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 },
+  logo:    { width: 44, height: 44, borderRadius: 12, objectFit: "contain" as const },
+  wrap:    { maxWidth: 680, margin: "0 auto", padding: "28px 16px" },
+  card:    { background: "rgba(255,255,255,0.85)", border: "1px solid #f3d5d5", borderRadius: 20, padding: "20px 22px", marginBottom: 16, boxShadow: "0 2px 12px rgba(180,80,80,0.06)" },
+  stopNum: { color: "#b91c1c", fontWeight: "bold", fontSize: 13, letterSpacing: "0.06em", textTransform: "uppercase" as const, marginBottom: 4 },
+  name:    { color: "#1c1c1c", fontWeight: "bold", fontSize: 17, marginBottom: 8 },
+  info:    { color: "#6b5050", fontSize: 14, margin: "3px 0", display: "flex", alignItems: "flex-start", gap: 6 },
+  btnRow:  { display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" as const },
+};
+
+function Btn({ color, children, onClick }: { color: string; children: React.ReactNode; onClick?: () => void }) {
+  return (
+    <button onClick={onClick} style={{ background: color, color: "white", border: "none", padding: "10px 16px", borderRadius: 12, fontWeight: "bold", fontSize: 13, cursor: "pointer" }}>
+      {children}
+    </button>
+  );
+}
 
 export default function DriverPage() {
   const [name, setName]         = useState("");
@@ -41,57 +55,35 @@ export default function DriverPage() {
   const [nachbarName, setNachbarName] = useState("");
   const prevIds = useRef<Set<string>>(new Set());
 
-  // Auto-login from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("driverName");
     if (saved) { setName(saved); setLoggedIn(true); }
   }, []);
 
-  // Real-time listener
   useEffect(() => {
     if (!loggedIn || !name) return;
     setLoading(true);
-
     const q = query(collection(db, "touren"), where("fahrer", "==", name));
     const unsub = onSnapshot(q, (snap) => {
       const stops: Stop[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as Stop));
       stops.sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999));
       setTour(stops);
       setLoading(false);
-
-      // Push notification for new stops
       const newIds = new Set(stops.map(s => s.id));
       if (prevIds.current.size > 0) {
         stops.forEach(s => {
-          if (!prevIds.current.has(s.id)) {
-            showNotification(`Neuer Stop: ${s.name}`, s.adresse ?? "");
-          }
+          if (!prevIds.current.has(s.id)) notify(`Neuer Stop: ${s.name}`, s.adresse ?? "");
         });
       }
       prevIds.current = newIds;
     });
-
     return () => unsub();
   }, [loggedIn, name]);
 
-  function showNotification(title: string, body: string) {
-    if (typeof window === "undefined") return;
-    if (Notification.permission === "granted") {
-      new Notification(title, { body, icon: "/logo.png" });
-    } else if (Notification.permission !== "denied") {
-      Notification.requestPermission().then(p => {
-        if (p === "granted") new Notification(title, { body, icon: "/logo.png" });
-      });
-    }
-  }
-
-  function requestNotificationPermission() {
-    if (typeof window !== "undefined" && "Notification" in window) {
-      Notification.requestPermission().then(p => {
-        if (p === "granted") showNotification("Benachrichtigungen aktiviert", "Du wirst über neue Stops informiert.");
-        else alert("Benachrichtigungen wurden abgelehnt.");
-      });
-    }
+  function notify(title: string, body: string) {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission === "granted") new Notification(title, { body, icon: "/logo.png" });
+    else if (Notification.permission !== "denied") Notification.requestPermission().then(p => { if (p === "granted") new Notification(title, { body, icon: "/logo.png" }); });
   }
 
   async function updateStatus(stopId: string, status: string, nachbar = "") {
@@ -110,166 +102,152 @@ export default function DriverPage() {
     localStorage.setItem("driverName", found.name);
     setName(found.name);
     setLoggedIn(true);
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
+    if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
   }
 
-  function logout() {
-    localStorage.removeItem("driverName");
-    location.reload();
+  function logout() { localStorage.removeItem("driverName"); location.reload(); }
+
+  function navigateTo(adresse: string) {
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(adresse)}&travelmode=driving`, "_blank");
   }
 
   function openAllOnMap() {
     const pending = tour.filter(s => !s.status && s.adresse);
-    if (pending.length === 0) return;
-    const waypoints = pending.slice(0, -1).map(s => encodeURIComponent(s.adresse!)).join("|");
+    if (!pending.length) return;
     const dest = encodeURIComponent(pending[pending.length - 1].adresse!);
-    const origin = pending[0] ? encodeURIComponent(pending[0].adresse!) : "";
+    const origin = encodeURIComponent(pending[0].adresse!);
+    const waypoints = pending.slice(1, -1).map(s => encodeURIComponent(s.adresse!)).join("|");
     const url = pending.length === 1
-      ? `https://www.google.com/maps/dir/?api=1&destination=${dest}`
-      : `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&waypoints=${waypoints}&travelmode=driving`;
+      ? `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`
+      : `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${waypoints ? `&waypoints=${waypoints}` : ""}&travelmode=driving`;
     window.open(url, "_blank");
   }
 
-  function navigateTo(adresse: string) {
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(adresse)}&travelmode=driving`;
-    window.open(url, "_blank");
-  }
+  const pending = tour.filter(s => !s.status);
+  const done    = tour.filter(s => s.status);
+  const progress = tour.length > 0 ? (done.length / tour.length) * 100 : 0;
 
-  const delivered = tour.filter(s => s.status === "Geliefert").length;
-  const progress  = tour.length > 0 ? (delivered / tour.length) * 100 : 0;
-  const pending   = tour.filter(s => !s.status);
-  const done      = tour.filter(s => s.status);
-
-  // ── Login screen ──────────────────────────────────────────
+  // ── Login ────────────────────────────────────────────────
   if (!loggedIn) return (
-    <main style={{ minHeight: "100vh", background: "linear-gradient(180deg,#020617 0%,#04122b 100%)", display: "flex", justifyContent: "center", alignItems: "center", padding: 20, fontFamily: "Arial" }}>
-      <div style={{ width: "100%", maxWidth: 420, background: "rgba(15,23,42,0.88)", padding: 35, borderRadius: 30 }}>
-        <img src="/logo.png" alt="logo" style={{ width: 200, display: "block", margin: "0 auto 24px", borderRadius: 20 }} />
-        <h1 style={{ color: "white", marginBottom: 24, textAlign: "center", fontSize: 30 }}>Fahrer Login</h1>
-        <input placeholder="Name" value={name} onChange={e => setName(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && login()}
-          style={{ width: "100%", padding: 15, marginBottom: 14, borderRadius: 14, border: "none", fontSize: 16, boxSizing: "border-box" }} />
-        <input type="password" placeholder="Passwort" value={password} onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && login()}
-          style={{ width: "100%", padding: 15, marginBottom: 20, borderRadius: 14, border: "none", fontSize: 16, boxSizing: "border-box" }} />
-        <button onClick={login} style={{ width: "100%", padding: 16, border: "none", borderRadius: 14, background: "linear-gradient(90deg,#22c55e,#16a34a)", color: "white", fontWeight: "bold", fontSize: 18, cursor: "pointer" }}>
-          Login
+    <main style={{ ...S.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ position: "absolute", top: 0, left: 0, width: "26rem", height: "26rem", background: "rgba(251,207,207,0.35)", borderRadius: "50%", transform: "translate(-40%,-40%)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", bottom: 0, right: 0, width: "20rem", height: "20rem", background: "rgba(254,243,199,0.35)", borderRadius: "50%", transform: "translate(30%,30%)", pointerEvents: "none" }} />
+      <div style={{ ...S.card, maxWidth: 420, width: "100%", padding: 36, position: "relative" }}>
+        <img src="/logo.png" alt="logo" style={{ width: 160, display: "block", margin: "0 auto 24px", objectFit: "contain" }} />
+        <h1 style={{ color: "#7c2d12", textAlign: "center", fontSize: 26, fontWeight: "bold", marginBottom: 24 }}>Fahrer Login</h1>
+        <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && login()}
+          style={{ width: "100%", padding: 14, marginBottom: 12, borderRadius: 14, border: "1.5px solid #f3d5d5", fontSize: 15, background: "#fff9f7", boxSizing: "border-box", color: "#1c1c1c" }} />
+        <input type="password" placeholder="Passwort" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && login()}
+          style={{ width: "100%", padding: 14, marginBottom: 20, borderRadius: 14, border: "1.5px solid #f3d5d5", fontSize: 15, background: "#fff9f7", boxSizing: "border-box", color: "#1c1c1c" }} />
+        <button onClick={login} style={{ width: "100%", padding: 15, border: "none", borderRadius: 14, background: "#b91c1c", color: "white", fontWeight: "bold", fontSize: 17, cursor: "pointer" }}>
+          Anmelden
         </button>
       </div>
     </main>
   );
 
-  // ── Nachbar dialog ────────────────────────────────────────
+  // ── Nachbar dialog ───────────────────────────────────────
   if (nachbarStop) return (
-    <main style={{ minHeight: "100vh", background: "linear-gradient(180deg,#020617 0%,#04122b 100%)", display: "flex", justifyContent: "center", alignItems: "center", padding: 20, fontFamily: "Arial" }}>
-      <div style={{ width: "100%", maxWidth: 400, background: "rgba(15,23,42,0.95)", padding: 30, borderRadius: 24 }}>
-        <h2 style={{ color: "white", marginBottom: 20 }}>Name vom Nachbarn?</h2>
+    <main style={{ ...S.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ ...S.card, maxWidth: 400, width: "100%", padding: 30 }}>
+        <h2 style={{ color: "#7c2d12", marginBottom: 18, fontSize: 20 }}>🚪 Name vom Nachbarn?</h2>
         <input autoFocus value={nachbarName} onChange={e => setNachbarName(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter" && nachbarName.trim()) { updateStatus(nachbarStop, "Beim Nachbarn", nachbarName); setNachbarStop(null); setNachbarName(""); } }}
-          placeholder="Nachbar Name" style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", fontSize: 16, marginBottom: 16, boxSizing: "border-box" }} />
+          placeholder="Nachbar Name"
+          style={{ width: "100%", padding: 13, borderRadius: 12, border: "1.5px solid #f3d5d5", fontSize: 15, marginBottom: 14, boxSizing: "border-box", color: "#1c1c1c" }} />
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => { updateStatus(nachbarStop, "Beim Nachbarn", nachbarName); setNachbarStop(null); setNachbarName(""); }}
-            style={{ ...btn("#f97316"), flex: 1 }}>Bestätigen</button>
-          <button onClick={() => { setNachbarStop(null); setNachbarName(""); }}
-            style={{ ...btn("#475569"), flex: 1 }}>Abbrechen</button>
+          <Btn color="#f97316" onClick={() => { updateStatus(nachbarStop, "Beim Nachbarn", nachbarName); setNachbarStop(null); setNachbarName(""); }}>Bestätigen</Btn>
+          <Btn color="#9ca3af" onClick={() => { setNachbarStop(null); setNachbarName(""); }}>Abbrechen</Btn>
         </div>
       </div>
     </main>
   );
 
-  // ── Main driver view ──────────────────────────────────────
+  // ── Main ─────────────────────────────────────────────────
   return (
-    <main style={{ minHeight: "100vh", background: "linear-gradient(180deg,#020617 0%,#04122b 100%)", padding: "20px 16px 40px", fontFamily: "Arial" }}>
-      <div style={{ maxWidth: 700, margin: "0 auto" }}>
+    <main style={S.page}>
 
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <img src="/logo.png" alt="logo" style={{ width: 54, borderRadius: 14 }} />
-            <div>
-              <div style={{ color: "white", fontWeight: "bold", fontSize: 18 }}>{name}</div>
-              <div style={{ color: "#94a3b8", fontSize: 13 }}>Dirk Schröder FahrerApp</div>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={requestNotificationPermission} title="Benachrichtigungen"
-              style={{ ...btn("#1e40af"), padding: "10px 12px", fontSize: 18 }}>🔔</button>
-            <button onClick={logout} style={{ ...btn("#dc2626") }}>Logout</button>
+      {/* Decorative blobs */}
+      <div style={{ position: "fixed", top: 0, left: 0, width: "22rem", height: "22rem", background: "rgba(251,207,207,0.25)", borderRadius: "50%", transform: "translate(-40%,-40%)", pointerEvents: "none", zIndex: 0 }} />
+      <div style={{ position: "fixed", bottom: 0, right: 0, width: "18rem", height: "18rem", background: "rgba(254,243,199,0.25)", borderRadius: "50%", transform: "translate(30%,30%)", pointerEvents: "none", zIndex: 0 }} />
+
+      {/* Navbar */}
+      <nav style={S.nav}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <img src="/logo.png" alt="logo" style={S.logo} />
+          <div>
+            <div style={{ color: "#1c1c1c", fontWeight: "bold", fontSize: 15 }}>{name}</div>
+            <div style={{ color: "#9ca3af", fontSize: 12 }}>Dirk Schröder FahrerApp</div>
           </div>
         </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => { if ("Notification" in window) Notification.requestPermission().then(p => { if (p === "granted") notify("Benachrichtigungen aktiv", "Du wirst informiert."); }); }}
+            title="Benachrichtigungen" style={{ background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: 10, padding: "8px 12px", fontSize: 18, cursor: "pointer" }}>🔔</button>
+          <button onClick={logout} style={{ background: "#b91c1c", color: "white", border: "none", padding: "8px 16px", borderRadius: 10, fontWeight: "bold", fontSize: 14, cursor: "pointer" }}>Logout</button>
+        </div>
+      </nav>
+
+      <div style={{ ...S.wrap, position: "relative", zIndex: 1 }}>
 
         {/* Progress */}
-        <div style={{ background: "rgba(255,255,255,0.07)", padding: 20, borderRadius: 20, marginBottom: 20 }}>
+        <div style={S.card}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <span style={{ color: "white", fontWeight: "bold", fontSize: 16 }}>Fortschritt</span>
-            <span style={{ color: "#86efac", fontWeight: "bold" }}>{delivered} / {tour.length}</span>
+            <span style={{ color: "#7c2d12", fontWeight: "bold", fontSize: 13, letterSpacing: "0.08em", textTransform: "uppercase" }}>Fortschritt</span>
+            <span style={{ color: "#b91c1c", fontWeight: "bold" }}>{done.length} / {tour.length}</span>
           </div>
-          <div style={{ width: "100%", height: 16, background: "rgba(255,255,255,0.1)", borderRadius: 999, overflow: "hidden" }}>
-            <div style={{ width: `${progress}%`, height: "100%", background: "linear-gradient(90deg,#22c55e,#16a34a)", transition: "width 0.5s" }} />
+          <div style={{ width: "100%", height: 12, background: "#fde8e8", borderRadius: 999, overflow: "hidden" }}>
+            <div style={{ width: `${progress}%`, height: "100%", background: "linear-gradient(90deg,#b91c1c,#dc2626)", transition: "width 0.5s", borderRadius: 999 }} />
           </div>
         </div>
 
-        {/* Route map button */}
+        {/* Route button */}
         {pending.length > 0 && (
-          <button onClick={openAllOnMap}
-            style={{ ...btn("#7c3aed"), width: "100%", marginBottom: 20, padding: 14, fontSize: 15, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <button onClick={openAllOnMap} style={{ width: "100%", padding: 14, border: "none", borderRadius: 16, background: "#7c2d12", color: "white", fontWeight: "bold", fontSize: 15, cursor: "pointer", marginBottom: 20, boxShadow: "0 4px 14px rgba(124,45,18,0.2)" }}>
             🗺 Alle {pending.length} Stops als Route öffnen
           </button>
         )}
 
-        {loading && <p style={{ color: "#94a3b8", textAlign: "center" }}>Laden…</p>}
+        {loading && <p style={{ color: "#9ca3af", textAlign: "center", padding: 20 }}>Wird geladen…</p>}
 
         {/* Pending stops */}
         {pending.map((stop, i) => (
-          <div key={stop.id} style={{ background: "rgba(255,255,255,0.08)", padding: 20, borderRadius: 20, marginBottom: 16, borderLeft: "4px solid #3b82f6" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-              <h2 style={{ color: "white", margin: 0, fontSize: 17 }}>
-                <span style={{ color: "#60a5fa", marginRight: 8 }}>#{i + 1}</span>{stop.name}
-              </h2>
-            </div>
-            {stop.adresse && <p style={{ color: "#cbd5e1", margin: "4px 0", fontSize: 14 }}>📍 {stop.adresse}</p>}
-            {stop.telefon && (
-              <a href={`tel:${stop.telefon}`} style={{ color: "#7dd3fc", display: "block", margin: "4px 0", fontSize: 14, textDecoration: "none" }}>
-                📞 {stop.telefon}
-              </a>
-            )}
-            {stop.notiz && <p style={{ color: "#fcd34d", margin: "4px 0", fontSize: 13 }}>📝 {stop.notiz}</p>}
-
-            <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-              <button onClick={() => navigateTo(stop.adresse || stop.name || "")} style={{ ...btn("#2563eb") }}>
-                🧭 Navigieren
-              </button>
-              <button onClick={() => updateStatus(stop.id, "Geliefert")} style={btn("#22c55e")}>✅ Geliefert</button>
-              <button onClick={() => { setNachbarStop(stop.id); setNachbarName(""); }} style={btn("#f97316")}>🚪 Nachbar</button>
-              <button onClick={() => updateStatus(stop.id, "Vor die Tür")} style={btn("#0f766e")}>🚪 Vor Tür</button>
-              <button onClick={() => updateStatus(stop.id, "Falsche Adresse")} style={btn("#dc2626")}>❌ Falsch</button>
+          <div key={stop.id} style={{ ...S.card, borderLeft: "4px solid #b91c1c" }}>
+            <div style={S.stopNum}>Stop {i + 1}</div>
+            <div style={S.name}>{stop.name}</div>
+            {stop.adresse && <div style={S.info}><span>📍</span><span>{stop.adresse}</span></div>}
+            {stop.telefon && <a href={`tel:${stop.telefon}`} style={{ ...S.info, color: "#1d4ed8", textDecoration: "none" }}><span>📞</span><span>{stop.telefon}</span></a>}
+            {stop.notiz   && <div style={{ ...S.info, color: "#92400e" }}><span>📝</span><span>{stop.notiz}</span></div>}
+            <div style={S.btnRow}>
+              <Btn color="#1d4ed8" onClick={() => navigateTo(stop.adresse || stop.name || "")}>🧭 Navigieren</Btn>
+              <Btn color="#16a34a" onClick={() => updateStatus(stop.id, "Geliefert")}>✅ Geliefert</Btn>
+              <Btn color="#ea580c" onClick={() => { setNachbarStop(stop.id); setNachbarName(""); }}>🚪 Nachbar</Btn>
+              <Btn color="#0f766e" onClick={() => updateStatus(stop.id, "Vor die Tür")}>🚪 Vor Tür</Btn>
+              <Btn color="#dc2626" onClick={() => updateStatus(stop.id, "Falsche Adresse")}>❌ Falsch</Btn>
             </div>
           </div>
         ))}
 
         {/* Done stops */}
         {done.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <p style={{ color: "#64748b", fontSize: 13, marginBottom: 10 }}>— Erledigt ({done.length}) —</p>
+          <>
+            <p style={{ color: "#d1b3b3", fontSize: 12, textAlign: "center", margin: "8px 0 12px", letterSpacing: "0.1em" }}>— ERLEDIGT ({done.length}) —</p>
             {done.map(stop => (
-              <div key={stop.id} style={{ background: "rgba(22,163,74,0.12)", padding: 16, borderRadius: 16, marginBottom: 10, borderLeft: "4px solid #22c55e", opacity: 0.7 }}>
+              <div key={stop.id} style={{ ...S.card, opacity: 0.65, borderLeft: "4px solid #86efac" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ color: "#86efac", fontWeight: "bold", fontSize: 15 }}>✅ {stop.name}</span>
-                  <span style={{ color: "#4ade80", fontSize: 12 }}>{stop.deliveredTime}</span>
+                  <span style={{ color: "#15803d", fontWeight: "bold", fontSize: 15 }}>✅ {stop.name}</span>
+                  <span style={{ color: "#9ca3af", fontSize: 12 }}>{stop.deliveredTime}</span>
                 </div>
-                {stop.adresse && <p style={{ color: "#6b7280", margin: "3px 0 0", fontSize: 13 }}>📍 {stop.adresse}</p>}
-                {stop.status !== "Geliefert" && <p style={{ color: "#fb923c", margin: "3px 0 0", fontSize: 13 }}>{stop.status}{stop.nachbar ? ` — ${stop.nachbar}` : ""}</p>}
+                {stop.adresse && <div style={{ ...S.info, marginTop: 4 }}><span>📍</span><span>{stop.adresse}</span></div>}
+                {stop.status !== "Geliefert" && <div style={{ ...S.info, color: "#92400e" }}>{stop.status}{stop.nachbar ? ` — ${stop.nachbar}` : ""}</div>}
               </div>
             ))}
-          </div>
+          </>
         )}
 
         {!loading && tour.length === 0 && (
-          <div style={{ textAlign: "center", color: "#475569", marginTop: 60 }}>
-            <p style={{ fontSize: 48 }}>📦</p>
-            <p>Keine Stops für heute</p>
+          <div style={{ textAlign: "center", color: "#d1b3b3", marginTop: 60 }}>
+            <div style={{ fontSize: 52, marginBottom: 12 }}>🌸</div>
+            <p style={{ fontSize: 16 }}>Keine Stops für heute</p>
           </div>
         )}
       </div>
